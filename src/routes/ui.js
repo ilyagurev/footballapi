@@ -828,7 +828,7 @@ function renderActiveCard() {
         <img class="active-flag" src="\${homeFlag}" onerror="this.style.display='none'" alt="">
         <div class="active-name">\${esc(m.home_team_name_en)}</div>
       </div>
-      <div class="active-score">\${esc(String(m.home_score ?? 0))} – \${esc(String(m.away_score ?? 0))}</div>
+      <div class="active-score">\${isNS ? '–' : esc(String(m.home_score ?? 0)) + ' – ' + esc(String(m.away_score ?? 0))}</div>
       <div class="active-team">
         <img class="active-flag" src="\${awayFlag}" onerror="this.style.display='none'" alt="">
         <div class="active-name">\${esc(m.away_team_name_en)}</div>
