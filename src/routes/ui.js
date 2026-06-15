@@ -141,9 +141,13 @@ input[type=text] { flex: 1; }
 .active-flag { width: 96px; height: 64px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
 .active-name { font-size: 13px; color: var(--muted); text-align: center; }
 .active-score { font-size: 38px; font-weight: 700; font-family: var(--mono); padding: 0 14px; white-space: nowrap; flex-shrink: 0; }
+.active-min-row { text-align: center; margin: -2px 0 10px; min-height: 22px; }
+.amin-num { font-family: var(--mono); font-size: 20px; font-weight: 700; color: var(--live); }
+.amin-sep { font-size: 14px; color: var(--muted); margin: 0 8px; }
+.amin-lbl { font-size: 13px; font-weight: 600; color: var(--live); }
 .active-meta { display: flex; justify-content: space-between; font-size: 12px; }
 .active-group { color: var(--muted); }
-.active-min { color: var(--live); font-weight: 600; }
+.active-min { color: var(--muted); }
 .no-match { color: var(--muted); font-size: 12px; text-align: center; padding: 16px 0; }
 
 .lineup-tabs { display: flex; gap: 6px; margin-bottom: 8px; }
@@ -286,7 +290,7 @@ const I18N = {
     panel_match: 'Match', panel_active: 'Active match', panel_preview: 'Preview',
     card_hint: 'Click a row to preview;<br>the «Go live» button sends it to vMix.',
     st_firsthalf: '1st half', st_secondhalf: '2nd half', st_halftime: 'Half-time',
-    st_finished: 'Finished', st_notstarted: 'Not started',
+    st_live: 'Live', st_finished: 'Finished', st_notstarted: 'Not started',
     banner_onair: '● ON AIR (vMix)', banner_preview: 'Preview — not on air',
     copy: 'Copy', copied: '✓ Copied', copy_manual: 'Select manually',
     confirm_air_pre: 'Send to vMix (on air):\\n', confirm_air_post: '?', this_match: 'this match',
@@ -309,7 +313,7 @@ const I18N = {
     panel_match: 'Матч', panel_active: 'Активный матч', panel_preview: 'Просмотр',
     card_hint: 'Кликните строку для просмотра,<br>кнопка «В эфир» отправит матч в vMix.',
     st_firsthalf: '1-й тайм', st_secondhalf: '2-й тайм', st_halftime: 'Перерыв',
-    st_finished: 'Завершён', st_notstarted: 'Не начат',
+    st_live: 'Live', st_finished: 'Завершён', st_notstarted: 'Не начат',
     banner_onair: '● В ЭФИРЕ (vMix)', banner_preview: 'Просмотр — не в эфире',
     copy: 'Копировать', copied: '✓ Скопировано', copy_manual: 'Выделите вручную',
     confirm_air_pre: 'Отправить в эфир (vMix):\\n', confirm_air_post: '?', this_match: 'этот матч',
@@ -549,7 +553,7 @@ function renderHeaderMatch() {
   const m = S.match;
   const score = esc(String(m.home_score ?? 0)) + ' – ' + esc(String(m.away_score ?? 0));
   const e = m.time_elapsed || 'notstarted';
-  const isLive = e === 'firsthalf' || e === 'secondhalf' || e === 'halftime';
+  const isLive = e === 'firsthalf' || e === 'secondhalf' || e === 'live' || e === 'halftime';
   const isFT = e === 'finished';
   const min = isLive && S.minute ? S.minute + "'" : null;
   const statusLabel = min || (e === 'firsthalf' ? t('badge_h1') : e === 'secondhalf' ? t('badge_h2') : e === 'halftime' ? 'HT' : '');
@@ -630,7 +634,7 @@ function groupMatches(matches, sort) {
       key = t('group_word') + ' ' + (m.group || '—');
     } else if (sort === 'status') {
       const e = m.time_elapsed || 'notstarted';
-      key = (e === 'firsthalf' || e === 'secondhalf' || e === 'halftime') ? t('grp_live')
+      key = (e === 'firsthalf' || e === 'secondhalf' || e === 'live' || e === 'halftime') ? t('grp_live')
           : e === 'finished' ? t('grp_finished')
           : t('grp_upcoming');
     } else if (sort === 'team') {
@@ -650,7 +654,7 @@ function filterMatches(matches) {
 
   return matches.filter(m => {
     const elapsed = m.time_elapsed || 'notstarted';
-    const isLive = elapsed === 'firsthalf' || elapsed === 'secondhalf';
+    const isLive = elapsed === 'firsthalf' || elapsed === 'secondhalf' || elapsed === 'live';
     const isHT = elapsed === 'halftime';
     const isFT = elapsed === 'finished';
     const dt = parseDate(m.local_date, m.venue_utc_offset);
@@ -759,8 +763,9 @@ function statusBadge(m) {
   const isActive = S.activeMatchId === m.id;
   const min = isActive && S.minute ? S.minute + "'" : null;
 
-  if (e === 'firsthalf' || e === 'secondhalf') {
-    return '<span class="badge badge-live">' + (min || (e === 'firsthalf' ? t('badge_h1') : t('badge_h2'))) + '</span>';
+  if (e === 'firsthalf' || e === 'secondhalf' || e === 'live') {
+    const lbl = min || (e === 'firsthalf' ? t('badge_h1') : e === 'secondhalf' ? t('badge_h2') : 'LIVE');
+    return '<span class="badge badge-live">' + lbl + '</span>';
   }
   if (e === 'halftime') return '<span class="badge badge-ht">HT</span>';
   if (e === 'finished') return '<span class="badge badge-ft">FT</span>';
@@ -784,13 +789,26 @@ function renderActiveCard() {
 
   const homeFlag = '/flags/' + esc(m.home_team_id) + '.jpg';
   const awayFlag = '/flags/' + esc(m.away_team_id) + '.jpg';
-  const minLabel = (vm.isVmix && S.minute != null) ? S.minute + "' " : '';
-  const statusLabel = { firsthalf: t('st_firsthalf'), secondhalf: t('st_secondhalf'), halftime: t('st_halftime'), finished: t('st_finished'), notstarted: t('st_notstarted') }[m.time_elapsed] || m.time_elapsed || '';
+  const te = m.time_elapsed || 'notstarted';
+  const minute = (vm.isVmix && S.minute != null) ? S.minute : null;
+  const STATUS_LABELS = { firsthalf: t('st_firsthalf'), secondhalf: t('st_secondhalf'), halftime: t('st_halftime'), live: t('st_live'), finished: t('st_finished'), notstarted: t('st_notstarted') };
+  const statusLabel = STATUS_LABELS[te] || te;
+  const isActiveLive = te === 'firsthalf' || te === 'secondhalf' || te === 'live';
+  const isHT = te === 'halftime';
+  const isFT = te === 'finished';
+  const isNS = te === 'notstarted';
   const dt = parseDate(m.local_date, m.venue_utc_offset);
   const kickoff = dt ? dt.toLocaleString(dateLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '';
-  const rightMeta = (m.time_elapsed === 'notstarted' || !m.time_elapsed)
-    ? '🕐 ' + esc(kickoff)
-    : minLabel + statusLabel;
+
+  let minuteRow = '';
+  if (isActiveLive || isHT || isFT) {
+    const minPart = (minute != null && isActiveLive)
+      ? '<span class="amin-num">' + minute + "' </span><span class=\"amin-sep\">·</span>"
+      : '';
+    minuteRow = '<div class="active-min-row">' + minPart + '<span class="amin-lbl">' + esc(statusLabel) + '</span></div>';
+  }
+
+  const rightMeta = isNS ? '🕐 ' + esc(kickoff) : esc(kickoff);
 
   let banner;
   if (vm.isVmix) {
@@ -816,6 +834,7 @@ function renderActiveCard() {
         <div class="active-name">\${esc(m.away_team_name_en)}</div>
       </div>
     </div>
+    \${minuteRow}
     <div class="active-meta">
       <span class="active-group">\${esc(t('group_word'))} \${esc(m.group || '')}</span>
       <span class="active-min">\${rightMeta}</span>
