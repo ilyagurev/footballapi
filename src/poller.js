@@ -126,6 +126,25 @@ async function pollActiveMatch() {
     await loadLineups(match)
     state.lineupsForMatchId = state.activeMatchId
   }
+
+  pushScoreSnapshot(match)
+}
+
+// Keep a short rolling history of score/minute so the vMix output can be
+// delayed (broadcast sync). Snapshots are tagged with the match id.
+function pushScoreSnapshot(match) {
+  const now = Date.now()
+  state.scoreHistory.push({
+    t: now,
+    matchId: state.activeMatchId,
+    home_score: match.home_score,
+    away_score: match.away_score,
+    minute: state.minute,
+    time_elapsed: match.time_elapsed,
+  })
+  // keep a bit more than the max delay (60s) of history
+  const cutoff = now - 75_000
+  state.scoreHistory = state.scoreHistory.filter(s => s.t >= cutoff)
 }
 
 async function loadLineups(match) {

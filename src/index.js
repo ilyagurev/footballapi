@@ -4,7 +4,7 @@ import { ensureCacheDir } from './flags/converter.js'
 import { startPoller, lineupsForMatch } from './poller.js'
 import { state } from './state.js'
 import { roleForPassword, getRole, sessionCookie, clearCookie, requireAuth, requireAdmin } from './auth.js'
-import { loadActiveMatchId, saveActiveMatchId } from './persist.js'
+import { loadPersisted, persistState } from './persist.js'
 import vmixRoutes from './routes/vmix.js'
 import flagsRoutes from './routes/flags.js'
 import uiRoutes from './routes/ui.js'
@@ -50,9 +50,21 @@ app.post('/api/select/:id', requireAdmin, (req, res) => {
   state.activeMatchId = id
   state.lineupsForMatchId = null
   state.minute = null
-  saveActiveMatchId(id)  // persist so the on-air match survives restarts
+  state.scoreHistory = []   // new match — drop the previous match's delay buffer
+  persistState()            // persist so the on-air match survives restarts
   console.log('[api] selected match', id)
   res.json({ ok: true, matchId: id })
+})
+
+// Broadcast-delay (0..60s): vMix output lags real data by this many seconds
+app.post('/api/delay', requireAdmin, (req, res) => {
+  const raw = Number(req.body && req.body.seconds)
+  if (!Number.isFinite(raw)) return res.status(400).json({ error: 'bad seconds' })
+  const seconds = Math.max(0, Math.min(60, Math.round(raw)))
+  state.vmixDelaySec = seconds
+  persistState()
+  console.log('[api] vmix delay set to', seconds, 's')
+  res.json({ ok: true, seconds })
 })
 
 // Preview a match WITHOUT sending it to vMix (read-only details + squads)
@@ -76,6 +88,7 @@ app.get('/api/status', requireAuth, (_req, res) => {
     teamsMap: state.teamsMap,
     homeLineup: state.homeLineup,
     awayLineup: state.awayLineup,
+    vmixDelaySec: state.vmixDelaySec,
     lastUpdated: state.lastUpdated,
     lastError: state.lastError,
   })
@@ -86,12 +99,14 @@ app.use('/', uiRoutes)
 async function main() {
   await ensureCacheDir()
 
-  // Restore the on-air match from disk so a restart/redeploy doesn't blank vMix
-  const restored = await loadActiveMatchId()
-  if (restored) {
-    state.activeMatchId = restored
-    console.log('[persist] restored on-air match', restored)
+  // Restore on-air match + delay from disk so a restart/redeploy doesn't reset them
+  const restored = await loadPersisted()
+  if (restored.activeMatchId) {
+    state.activeMatchId = restored.activeMatchId
+    console.log('[persist] restored on-air match', restored.activeMatchId)
   }
+  state.vmixDelaySec = restored.vmixDelaySec
+  if (restored.vmixDelaySec) console.log('[persist] restored vmix delay', restored.vmixDelaySec, 's')
 
   startPoller()
   app.listen(PORT, () => {

@@ -19,6 +19,9 @@
   игроки с номером и позицией (GK/DEF/MID/FWD).
 - **Флаги** (`/flags/{teamId}.jpg`): высокого качества (flagcdn.com), 800×533,
   единый размер и соотношение сторон 3:2.
+- **Задержка под эфир** (broadcast delay): админ выставляет задержку 0–60 сек
+  (кнопки ▲/▼ в шапке); `score.json` отдаёт счёт/минуту/статус такими, какими
+  они были `N` секунд назад — для синхронизации титров с задержкой трансляции.
 
 ---
 
@@ -108,6 +111,7 @@ src/
 | GET | `/api/status` | любая роль | состояние (матчи, активный, составы) |
 | GET | `/api/preview/:id` | любая роль | данные матча без отправки в эфир |
 | POST | `/api/select/:id` | **admin** | отправить матч в эфир (vMix) |
+| POST | `/api/delay` | **admin** | задержка вывода в vMix, 0–60 сек (broadcast sync) |
 | GET | `/vmix/score.json` | **публичный** | титр счёта для vMix |
 | GET | `/vmix/lineup/home.json` | **публичный** | состав хозяев |
 | GET | `/vmix/lineup/away.json` | **публичный** | состав гостей |
@@ -164,7 +168,7 @@ curl -s -b /tmp/c http://localhost:3050/api/status | head -c 200
 | Том | Монтируется | Содержит |
 |---|---|---|
 | `footballapi_flags_cache` | `/app/cache/flags` | сконвертированные JPG-флаги |
-| `footballapi_state_data` | `/app/data` | `active.json` — матч в эфире (переживает рестарт) |
+| `footballapi_state_data` | `/app/data` | `active.json` — матч в эфире + задержка vMix (переживают рестарт) |
 
 ---
 

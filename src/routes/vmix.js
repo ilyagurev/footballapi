@@ -24,8 +24,41 @@ function kickoffDubai(match) {
   } catch { return '' }
 }
 
+// Resolve the score/minute/status to emit, applying the broadcast delay.
+// With delay > 0 we return the snapshot as it was `vmixDelaySec` ago, so the
+// vMix titles stay in sync with the delayed broadcast feed.
+function delayedDynamic() {
+  const { match, minute, vmixDelaySec, activeMatchId } = state
+  const live = {
+    home_score: match.home_score,
+    away_score: match.away_score,
+    minute,
+    time_elapsed: match.time_elapsed,
+  }
+  if (!vmixDelaySec) return live
+
+  const target = Date.now() - vmixDelaySec * 1000
+  const hist = state.scoreHistory.filter(s => s.matchId === activeMatchId)
+  if (!hist.length) return live
+
+  // newest snapshot at or before the target time; if none is old enough yet
+  // (history still filling after selecting the match), use the oldest we have
+  let snap = null
+  for (const s of hist) {
+    if (s.t <= target) snap = s
+    else break
+  }
+  if (!snap) snap = hist[0]
+  return {
+    home_score: snap.home_score,
+    away_score: snap.away_score,
+    minute: snap.minute,
+    time_elapsed: snap.time_elapsed,
+  }
+}
+
 router.get('/score.json', (req, res) => {
-  const { match, minute, teamsMap } = state
+  const { match, teamsMap } = state
 
   if (!match) {
     return res.set('Cache-Control', 'no-store').json([])
@@ -34,17 +67,18 @@ router.get('/score.json', (req, res) => {
   const home = teamsMap[match.home_team_id]
   const away = teamsMap[match.away_team_id]
   const base = `${req.protocol}://${req.get('host')}`
+  const d = delayedDynamic()
 
   res.set('Cache-Control', 'no-store').json([{
     HomeTeam:    match.home_team_name_en || '',
     AwayTeam:    match.away_team_name_en || '',
     HomeCode:    home?.fifa_code || '',
     AwayCode:    away?.fifa_code || '',
-    HomeScore:   String(match.home_score ?? 0),
-    AwayScore:   String(match.away_score ?? 0),
+    HomeScore:   String(d.home_score ?? 0),
+    AwayScore:   String(d.away_score ?? 0),
     Group:       match.group || '',
-    Minute:      minute != null ? String(minute) : '',
-    Status:       match.time_elapsed || 'notstarted',
+    Minute:      d.minute != null ? String(d.minute) : '',
+    Status:       d.time_elapsed || 'notstarted',
     KickoffDubai: kickoffDubai(match),
     HomeFlagUrl:  home ? `${base}/flags/${match.home_team_id}.jpg` : '',
     AwayFlagUrl:  away ? `${base}/flags/${match.away_team_id}.jpg` : '',

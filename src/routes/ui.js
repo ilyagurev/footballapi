@@ -52,6 +52,13 @@ header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; bord
 .poll.updating .poll-num { color: var(--green); }
 @keyframes pollSpin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }
 
+.delay-ctl { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 6px; }
+.delay-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.delay-val { font-family: var(--mono); font-size: 12px; font-weight: 700; min-width: 30px; text-align: center; color: var(--text); }
+.delay-btn { font-size: 12px; line-height: 1; width: 22px; height: 22px; padding: 0; border: 1px solid var(--border); border-radius: 4px; background: var(--bg3); color: var(--text); cursor: pointer; }
+.delay-btn:hover { border-color: var(--active-border); color: var(--active-border); }
+.delay-btn:active { background: var(--active-border); color: #fff; }
+
 .lang-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .lang-switch button { font-family: inherit; font-size: 11px; font-weight: 700; padding: 4px 9px; background: var(--bg3); color: var(--muted); border: none; cursor: pointer; }
 .lang-switch button.on { background: var(--active-border); color: #fff; }
@@ -199,6 +206,12 @@ input[type=text] { flex: 1; }
     </svg>
     <span class="poll-num" id="poll-num">10s</span>
   </span>
+  <span class="delay-ctl" id="delay-ctl" style="display:none" data-i18n-title="delay_title" title="Broadcast delay for vMix (0–60s)">
+    <span class="delay-label" data-i18n="delay">Delay</span>
+    <button class="delay-btn" onclick="changeDelay(-1)" aria-label="−1">▼</button>
+    <span class="delay-val" id="delay-val">0s</span>
+    <button class="delay-btn" onclick="changeDelay(1)" aria-label="+1">▲</button>
+  </span>
   <span class="lang-switch">
     <button data-lang="en" onclick="setLang('en')">EN</button>
     <button data-lang="ru" onclick="setLang('ru')">RU</button>
@@ -266,6 +279,7 @@ const I18N = {
     f_search_ph: 'Search team…', loading: 'Loading...', lineup: 'Lineup',
     tab_home: 'Home', tab_away: 'Away', datasource: 'DataSource URL for vMix',
     just_now: 'just now', sec_ago: 's ago', sec_short: 's', error_prefix: 'Error: ',
+    delay: 'Delay', delay_title: 'Broadcast delay for vMix output (0–60s)',
     no_data: 'No data', no_matches: 'No matches', no_lineup: 'No data',
     group_word: 'Group', grp_live: '🔴 Live', grp_finished: '✓ Finished', grp_upcoming: '⏳ Upcoming',
     badge_h1: '1H', badge_h2: '2H', air_on: '● on air', air_send: 'Go live',
@@ -288,6 +302,7 @@ const I18N = {
     f_search_ph: 'Поиск команды…', loading: 'Загрузка...', lineup: 'Состав',
     tab_home: 'Хозяева', tab_away: 'Гости', datasource: 'DataSource URL для vMix',
     just_now: 'только что', sec_ago: ' сек назад', sec_short: 'с', error_prefix: 'Ошибка: ',
+    delay: 'Задержка', delay_title: 'Задержка передачи в vMix (0–60с)',
     no_data: 'Нет данных', no_matches: 'Нет матчей', no_lineup: 'Нет данных',
     group_word: 'Группа', grp_live: '🔴 Live', grp_finished: '✓ Завершённые', grp_upcoming: '⏳ Предстоящие',
     badge_h1: '1Т', badge_h2: '2Т', air_on: '● эфир', air_send: 'В эфир',
@@ -346,6 +361,8 @@ let previewId = null;      // match clicked for viewing (client-only, NOT sent t
 let previewData = null;    // { match, homeLineup, awayLineup } when previewing a non-active match
 let ROLE = null;          // 'admin' | 'viewer' — set after login
 let polling = false;
+let delaySec = 0;         // broadcast delay for vMix output (0..60), admin-controlled
+let delayDirtyUntil = 0;  // ignore server delay sync briefly after a local change
 
 const POLL_MS = 10_000;
 const POLL_CIRC = 2 * Math.PI * 15;  // ring circumference (r=15), matches CSS dasharray
@@ -372,6 +389,34 @@ function flashPoll() {
   void el.offsetWidth;  // reflow to restart the animation
   el.classList.add('updating');
   setTimeout(function() { el.classList.remove('updating'); }, 600);
+}
+
+// Broadcast-delay control (admin only)
+function renderDelay() {
+  const el = document.getElementById('delay-ctl');
+  if (!el) return;
+  el.style.display = canAir() ? '' : 'none';
+  const v = document.getElementById('delay-val');
+  if (v) v.textContent = delaySec + t('sec_short');
+}
+
+async function changeDelay(d) {
+  const next = Math.max(0, Math.min(60, delaySec + d));
+  if (next === delaySec) return;
+  delaySec = next;
+  delayDirtyUntil = Date.now() + 4000;  // hold local value over server sync while adjusting
+  renderDelay();  // optimistic
+  try {
+    const res = await fetch('/api/delay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seconds: next }),
+    });
+    if (res.ok) {
+      const j = await res.json();
+      if (typeof j.seconds === 'number') { delaySec = j.seconds; renderDelay(); }
+    }
+  } catch (e) {}
 }
 
 function activeId() { return S && S.activeMatchId; }
@@ -479,6 +524,7 @@ async function fetchState() {
     const res = await fetch('/api/status');
     if (res.status === 401) { showAuth(); return; }
     S = await res.json();
+    if (typeof S.vmixDelaySec === 'number' && Date.now() >= delayDirtyUntil) delaySec = S.vmixDelaySec;
     render();
     flashPoll();
   } catch (e) {
@@ -493,6 +539,7 @@ function render() {
   renderActiveCard();
   renderLineup();
   renderEndpoints();
+  renderDelay();
   populateGroupFilter();
 }
 
