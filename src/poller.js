@@ -94,24 +94,28 @@ async function pollActiveMatch() {
 }
 
 async function loadLineups(match) {
-  const homeTla = state.teamsMap[match.home_team_id]?.fifa_code
-  const awayTla = state.teamsMap[match.away_team_id]?.fifa_code
-
-  const [home, away] = await Promise.allSettled([
-    homeTla ? getOrFetchSquad(homeTla) : Promise.resolve([]),
-    awayTla ? getOrFetchSquad(awayTla) : Promise.resolve([]),
-  ])
-
-  state.homeLineup = home.status === 'fulfilled' ? home.value : []
-  state.awayLineup = away.status === 'fulfilled' ? away.value : []
-
-  if (home.status === 'rejected') console.warn(`[lineups] home (${homeTla}): ${home.reason?.message}`)
-  if (away.status === 'rejected') console.warn(`[lineups] away (${awayTla}): ${away.reason?.message}`)
+  const { homeLineup, awayLineup } = await lineupsForMatch(match)
+  state.homeLineup = homeLineup
+  state.awayLineup = awayLineup
 }
 
-async function getOrFetchSquad(tla) {
+export async function getOrFetchSquad(tla) {
   if (state.squadsCache[tla]) return state.squadsCache[tla]
   const squad = await getWCSquad(tla)
   state.squadsCache[tla] = squad
   return squad
+}
+
+// Load both squads for any match (used by preview endpoint — does not touch active state)
+export async function lineupsForMatch(match) {
+  const homeTla = state.teamsMap[match.home_team_id]?.fifa_code
+  const awayTla = state.teamsMap[match.away_team_id]?.fifa_code
+  const [home, away] = await Promise.allSettled([
+    homeTla ? getOrFetchSquad(homeTla) : Promise.resolve([]),
+    awayTla ? getOrFetchSquad(awayTla) : Promise.resolve([]),
+  ])
+  return {
+    homeLineup: home.status === 'fulfilled' ? home.value : [],
+    awayLineup: away.status === 'fulfilled' ? away.value : [],
+  }
 }

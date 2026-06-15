@@ -58,11 +58,12 @@ input[type=text] { flex: 1; }
 }
 .match-row {
   display: flex; align-items: center; gap: 10px; padding: 8px 12px;
-  border-bottom: 1px solid var(--border); cursor: default;
-  transition: background 0.1s;
+  border-bottom: 1px solid var(--border); cursor: pointer;
+  transition: background 0.1s; border-left: 3px solid transparent;
 }
 .match-row:hover { background: var(--bg3); }
-.match-row.is-active { background: var(--active-bg); border-left: 3px solid var(--active-border); padding-left: 9px; }
+.match-row.is-preview { background: var(--active-bg); }
+.match-row.is-vmix { border-left-color: var(--green); }
 .match-time { font-size: 11px; color: var(--muted); min-width: 52px; }
 .match-teams { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; }
 .flag-img { width: 22px; height: 15px; object-fit: cover; border-radius: 2px; border: 1px solid var(--border); }
@@ -81,7 +82,14 @@ input[type=text] { flex: 1; }
   color: var(--muted); background: transparent; cursor: pointer; transition: all 0.1s; white-space: nowrap;
 }
 .sel-btn:hover { border-color: var(--active-border); color: var(--text); }
-.sel-btn.active { background: var(--active-border); border-color: var(--active-border); color: #fff; cursor: default; }
+.sel-btn.vmix { background: var(--green); border-color: var(--green); color: #fff; cursor: default; }
+
+.view-banner { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border-radius: 8px 8px 0 0; font-size: 11px; font-weight: 600; }
+.view-banner.on-air { background: #0e2a16; color: var(--green); border: 1px solid var(--green); border-bottom: none; }
+.view-banner.preview { background: var(--bg3); color: var(--muted); border: 1px solid var(--border); border-bottom: none; }
+.send-air-btn { font-size: 11px; padding: 3px 10px; border-radius: 5px; border: 1px solid var(--green); background: transparent; color: var(--green); cursor: pointer; white-space: nowrap; }
+.send-air-btn:hover { background: var(--green); color: #fff; }
+.active-card.framed { border-radius: 0 0 10px 10px; border-top: none; }
 
 .right { width: 280px; flex-shrink: 0; display: flex; flex-direction: column; overflow-y: auto; padding: 14px 12px; gap: 16px; background: var(--bg2); }
 .panel-title { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
@@ -168,7 +176,7 @@ input[type=text] { flex: 1; }
 
   <div class="right">
     <div>
-      <div class="panel-title">Активный матч</div>
+      <div class="panel-title" id="match-panel-title">Активный матч</div>
       <div id="active-card"></div>
     </div>
     <div>
@@ -189,6 +197,35 @@ input[type=text] { flex: 1; }
 <script>
 let S = null;
 let lineupTab = 'home';
+let previewId = null;      // match clicked for viewing (client-only, NOT sent to vMix)
+let previewData = null;    // { match, homeLineup, awayLineup } when previewing a non-active match
+
+function activeId() { return S && S.activeMatchId; }
+
+// What the right panel (card + lineups) should display
+function viewModel() {
+  if (previewId && previewId !== activeId() && previewData && previewData.match) {
+    // re-resolve match from fresh poll data so score/status stay current; keep fetched lineups
+    const fresh = (S && S.allMatches && S.allMatches.find(function(x){ return x.id === previewId; })) || previewData.match;
+    return { match: fresh, home: previewData.homeLineup || [], away: previewData.awayLineup || [], isVmix: false };
+  }
+  return { match: (S && S.match) || null, home: (S && S.homeLineup) || [], away: (S && S.awayLineup) || [], isVmix: !!(S && S.match) };
+}
+
+async function previewMatch(id) {
+  previewId = id;
+  if (id === activeId()) { previewData = null; render(); return; }
+  const m = S && S.allMatches && S.allMatches.find(function(x){ return x.id === id; });
+  previewData = { match: m, homeLineup: [], awayLineup: [] };  // show card instantly, lineups fill after fetch
+  render();
+  try {
+    const res = await fetch('/api/preview/' + id);
+    const data = await res.json();
+    if (previewId === id) { previewData = data; render(); }
+  } catch (e) {}
+}
+
+function handleRowClick(el) { previewMatch(el.dataset.mid); }
 
 const POS_ORDER = ['Goalkeeper', 'Defender', 'Midfielder', 'Forward', 'Attacker'];
 const POS_LABEL = { Goalkeeper: 'GK', Defender: 'DEF', Midfielder: 'MID', Forward: 'FWD', Attacker: 'FWD' };
@@ -389,7 +426,9 @@ function renderMatchList() {
 }
 
 function matchRow(m) {
-  const isActive = S.activeMatchId === m.id;
+  const isVmix = S.activeMatchId === m.id;
+  const viewedId = previewId || S.activeMatchId;
+  const isPreview = viewedId === m.id;
   const dt = parseDate(m.local_date, m.venue_utc_offset);
   const time = dt ? dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '';
   const score = (m.finished === 'TRUE' || m.time_elapsed !== 'notstarted')
@@ -398,8 +437,9 @@ function matchRow(m) {
   const badge = statusBadge(m);
   const homeFlag = '/flags/' + esc(m.home_team_id) + '.jpg';
   const awayFlag = '/flags/' + esc(m.away_team_id) + '.jpg';
+  const cls = 'match-row' + (isPreview ? ' is-preview' : '') + (isVmix ? ' is-vmix' : '');
 
-  return \`<div class="match-row\${isActive ? ' is-active' : ''}">
+  return \`<div class="\${cls}" data-mid="\${m.id}" onclick="handleRowClick(this)">
     <div class="match-time">\${time}</div>
     <div class="match-teams">
       <img class="flag-img" src="\${homeFlag}" onerror="this.style.display='none'" alt="">
@@ -410,7 +450,7 @@ function matchRow(m) {
     </div>
     <div class="match-score">\${score}</div>
     \${badge}
-    <button class="sel-btn\${isActive ? ' active' : ''}" data-mid="\${m.id}" \${isActive ? 'disabled' : 'onclick="handleSelect(this)"'}>\${isActive ? 'активен' : 'выбрать'}</button>
+    <button class="sel-btn\${isVmix ? ' vmix' : ''}" data-mid="\${m.id}" \${isVmix ? 'disabled' : 'onclick="event.stopPropagation(); handleSelect(this)"'}>\${isVmix ? '● эфир' : 'в эфир'}</button>
   </div>\`;
 }
 
@@ -432,17 +472,37 @@ function statusBadge(m) {
 
 function renderActiveCard() {
   const el = document.getElementById('active-card');
-  if (!S.match) {
-    el.innerHTML = '<div class="no-match">Матч не выбран</div>';
+  const titleEl = document.getElementById('match-panel-title');
+  const vm = viewModel();
+  const m = vm.match;
+
+  if (!m) {
+    titleEl.textContent = 'Матч';
+    el.innerHTML = '<div class="no-match">Кликните строку для просмотра,<br>кнопка «в эфир» отправит матч в vMix.</div>';
     return;
   }
-  const m = S.match;
+
   const homeFlag = '/flags/' + esc(m.home_team_id) + '.jpg';
   const awayFlag = '/flags/' + esc(m.away_team_id) + '.jpg';
-  const minLabel = S.minute != null ? S.minute + "' " : '';
+  const minLabel = (vm.isVmix && S.minute != null) ? S.minute + "' " : '';
   const statusLabel = { firsthalf: '1-й тайм', secondhalf: '2-й тайм', halftime: 'Перерыв', finished: 'Завершён', notstarted: 'Не начат' }[m.time_elapsed] || m.time_elapsed || '';
+  const dt = parseDate(m.local_date, m.venue_utc_offset);
+  const kickoff = dt ? dt.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '';
+  const rightMeta = (m.time_elapsed === 'notstarted' || !m.time_elapsed)
+    ? '🕐 ' + esc(kickoff)
+    : minLabel + statusLabel;
 
-  el.innerHTML = \`<div class="active-card">
+  let banner;
+  if (vm.isVmix) {
+    titleEl.textContent = 'Активный матч';
+    banner = '<div class="view-banner on-air"><span>● В ЭФИРЕ (vMix)</span></div>';
+  } else {
+    titleEl.textContent = 'Просмотр';
+    banner = '<div class="view-banner preview"><span>Просмотр — не в эфире</span>'
+      + '<button class="send-air-btn" data-mid="' + esc(m.id) + '" onclick="handleSelect(this)">▶ В эфир</button></div>';
+  }
+
+  el.innerHTML = banner + \`<div class="active-card framed">
     <div class="active-teams">
       <div class="active-team">
         <img class="active-flag" src="\${homeFlag}" onerror="this.style.display='none'" alt="">
@@ -456,7 +516,7 @@ function renderActiveCard() {
     </div>
     <div class="active-meta">
       <span class="active-group">Группа \${esc(m.group || '')}</span>
-      <span class="active-min">\${minLabel}\${statusLabel}</span>
+      <span class="active-min">\${rightMeta}</span>
     </div>
   </div>\`;
 }
@@ -470,7 +530,8 @@ function setTab(tab) {
 
 function renderLineup() {
   const el = document.getElementById('lineup');
-  const players = lineupTab === 'home' ? (S?.homeLineup || []) : (S?.awayLineup || []);
+  const vm = viewModel();
+  const players = lineupTab === 'home' ? vm.home : vm.away;
 
   if (!players.length) {
     el.innerHTML = '<div class="no-lineup">Нет данных</div>';
@@ -526,8 +587,10 @@ function handleSelect(btn) {
 async function selectMatch(id) {
   const match = S && S.allMatches && S.allMatches.find(function(m) { return m.id === id; });
   const label = match ? match.home_team_name_en + ' vs ' + match.away_team_name_en : 'этот матч';
-  if (!confirm('Выбрать: ' + label + '?')) return;
+  if (!confirm('Отправить в эфир (vMix):\\n' + label + '?')) return;
   await fetch('/api/select/' + id, { method: 'POST' });
+  previewId = null;
+  previewData = null;
   await fetchState();
 }
 

@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import { ensureCacheDir } from './flags/converter.js'
-import { startPoller } from './poller.js'
+import { startPoller, lineupsForMatch } from './poller.js'
 import { state } from './state.js'
 import vmixRoutes from './routes/vmix.js'
 import flagsRoutes from './routes/flags.js'
@@ -22,6 +22,18 @@ app.post('/api/select/:id', (req, res) => {
   state.minute = null
   console.log('[api] selected match', id)
   res.json({ ok: true, matchId: id })
+})
+
+// Preview a match WITHOUT sending it to vMix (read-only details + squads)
+app.get('/api/preview/:id', async (req, res) => {
+  const match = state.allMatches.find(m => m.id === req.params.id)
+  if (!match) return res.status(404).json({ error: 'match not found' })
+  try {
+    const { homeLineup, awayLineup } = await lineupsForMatch(match)
+    res.json({ match, homeLineup, awayLineup })
+  } catch (err) {
+    res.json({ match, homeLineup: [], awayLineup: [], error: err.message })
+  }
 })
 
 app.get('/api/status', (_req, res) => {
