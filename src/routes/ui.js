@@ -41,6 +41,17 @@ header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; bord
 .hdr-space { flex: 1; }
 .logout-btn { font-size: 12px; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg3); color: var(--muted); cursor: pointer; white-space: nowrap; }
 .logout-btn:hover { border-color: var(--live); color: var(--live); }
+.poll { display: inline-flex; align-items: center; gap: 7px; }
+.poll-ring { width: 24px; height: 24px; transform: rotate(-90deg); }
+.poll-ring circle { fill: none; stroke-width: 3.5; }
+.poll-bg { stroke: var(--border); }
+.poll-fg { stroke: var(--green); stroke-linecap: round; stroke-dasharray: 94.25; stroke-dashoffset: 0; }
+.poll-num { font-family: var(--mono); font-size: 12px; color: var(--muted); min-width: 26px; text-align: right; }
+.poll.updating .poll-ring { animation: pollSpin 0.6s ease; }
+.poll.updating .poll-fg { stroke: var(--text); }
+.poll.updating .poll-num { color: var(--green); }
+@keyframes pollSpin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }
+
 .role-tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
 .role-tag.admin { background: #0e2a16; color: var(--green); }
 .role-tag.viewer { background: var(--bg3); color: var(--muted); }
@@ -176,7 +187,13 @@ input[type=text] { flex: 1; }
   <span class="hdr-space"></span>
   <div id="hdr-match"></div>
   <span class="hdr-space"></span>
-  <span class="hdr-info">опрос каждые 10 сек</span>
+  <span class="poll" id="poll" title="Автообновление каждые 10 секунд">
+    <svg class="poll-ring" viewBox="0 0 36 36" aria-hidden="true">
+      <circle class="poll-bg" cx="18" cy="18" r="15"></circle>
+      <circle class="poll-fg" id="poll-arc" cx="18" cy="18" r="15"></circle>
+    </svg>
+    <span class="poll-num" id="poll-num">10с</span>
+  </span>
   <span class="role-tag" id="role-tag" style="display:none"></span>
   <button class="logout-btn" id="logout-btn" onclick="logout()" style="display:none">Выход</button>
 </header>
@@ -235,7 +252,32 @@ let previewData = null;    // { match, homeLineup, awayLineup } when previewing 
 let ROLE = null;          // 'admin' | 'viewer' — set after login
 let polling = false;
 
+const POLL_MS = 10_000;
+const POLL_CIRC = 2 * Math.PI * 15;  // ring circumference (r=15), matches CSS dasharray
+let nextPollAt = 0;
+
 function canAir() { return ROLE === 'admin'; }
+
+// Smoothly update the countdown ring + number toward the next poll
+function tickPoll() {
+  const arc = document.getElementById('poll-arc');
+  const num = document.getElementById('poll-num');
+  if (!arc || !num) return;
+  const remainMs = Math.max(0, nextPollAt - Date.now());
+  const frac = remainMs / POLL_MS;                 // 1 → 0
+  arc.style.strokeDashoffset = String(POLL_CIRC * (1 - frac));  // full → empty
+  num.textContent = Math.ceil(remainMs / 1000) + 'с';
+}
+
+// Brief flash/spin when fresh data arrives
+function flashPoll() {
+  const el = document.getElementById('poll');
+  if (!el) return;
+  el.classList.remove('updating');
+  void el.offsetWidth;  // reflow to restart the animation
+  el.classList.add('updating');
+  setTimeout(function() { el.classList.remove('updating'); }, 600);
+}
 
 function activeId() { return S && S.activeMatchId; }
 
@@ -301,8 +343,9 @@ function showApp() {
   fetchState();
   if (!polling) {
     polling = true;
-    setInterval(fetchState, 10_000);
+    setInterval(fetchState, POLL_MS);
     setInterval(renderHeader, 5_000);
+    setInterval(tickPoll, 200);
   }
 }
 
@@ -336,11 +379,13 @@ async function logout() {
 }
 
 async function fetchState() {
+  nextPollAt = Date.now() + POLL_MS;  // reset countdown for this cycle
   try {
     const res = await fetch('/api/status');
     if (res.status === 401) { showAuth(); return; }
     S = await res.json();
     render();
+    flashPoll();
   } catch (e) {
     document.getElementById('hdr-info').textContent = 'Ошибка соединения';
   }
