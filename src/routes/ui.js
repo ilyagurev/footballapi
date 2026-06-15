@@ -137,16 +137,20 @@ input[type=text] { flex: 1; }
 .player-name { font-size: 12px; }
 .no-lineup { color: var(--muted); font-size: 12px; padding: 8px 0; }
 
-.endpoints { display: flex; flex-direction: column; gap: 5px; }
+.endpoints { display: flex; flex-direction: column; gap: 7px; }
 .ep {
-  display: flex; align-items: center; gap: 7px; padding: 7px 9px;
-  background: var(--bg3); border-radius: 7px; border: 1px solid var(--border);
+  display: flex; align-items: center; gap: 9px; padding: 9px 11px;
+  background: var(--bg3); border-radius: 8px; border: 1px solid var(--border);
 }
-.ep-method { font-family: var(--mono); font-size: 10px; color: var(--green); font-weight: 700; min-width: 28px; }
-.ep-path { font-family: var(--mono); font-size: 11px; color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ep-copy { font-size: 11px; color: var(--muted); cursor: pointer; flex-shrink: 0; padding: 0 2px; }
-.ep-copy:hover { color: var(--text); }
-.copy-ok { color: var(--green) !important; }
+.ep-method { font-family: var(--mono); font-size: 11px; color: var(--green); font-weight: 700; min-width: 32px; }
+.ep-path { font-family: var(--mono); font-size: 12px; color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-copy {
+  font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; flex-shrink: 0;
+  padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg2);
+  white-space: nowrap; transition: all 0.1s;
+}
+.ep-copy:hover { border-color: var(--active-border); color: var(--active-border); }
+.ep-copy.copy-ok { color: var(--green); border-color: var(--green); }
 
 #hdr-match { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 #hdr-match:not(:empty) { padding: 4px 12px; background: var(--active-bg); border: 1px solid var(--active-border); border-radius: 8px; }
@@ -679,16 +683,56 @@ function renderEndpoints() {
     <div class="ep">
       <span class="ep-method">\${e.method}</span>
       <span class="ep-path">\${esc(host + e.path)}</span>
-      <span class="ep-copy" onclick="copyEp(this, '\${esc(host + e.path)}')">⎘</span>
+      <button class="ep-copy" data-url="\${esc(host + e.path)}" onclick="copyEp(this)">Копировать</button>
     </div>\`).join('');
 }
 
-function copyEp(el, text) {
-  navigator.clipboard.writeText(text).then(() => {
+function copyEp(el) {
+  const text = el.dataset.url;
+  copyText(text).then(function(ok) {
+    const prev = el.textContent;
     el.classList.add('copy-ok');
-    el.textContent = '✓';
-    setTimeout(() => { el.classList.remove('copy-ok'); el.textContent = '⎘'; }, 1500);
+    el.textContent = ok ? '✓ Скопировано' : 'Выделите вручную';
+    if (!ok) selectUrlText(el);
+    setTimeout(function() { el.classList.remove('copy-ok'); el.textContent = prev; }, 1500);
   });
+}
+
+// navigator.clipboard only works in a secure context (HTTPS/localhost).
+// The VPS is served over plain HTTP, so fall back to execCommand('copy').
+function copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+    return navigator.clipboard.writeText(text).then(function() { return true; }).catch(function() { return fallbackCopy(text); });
+  }
+  return Promise.resolve(fallbackCopy(text));
+}
+
+function fallbackCopy(text) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.top = '-9999px';
+    ta.setAttribute('readonly', '');
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+function selectUrlText(btn) {
+  const path = btn.parentElement && btn.parentElement.querySelector('.ep-path');
+  if (!path) return;
+  const range = document.createRange();
+  range.selectNodeContents(path);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
 }
 
 function handleSelect(btn) {
