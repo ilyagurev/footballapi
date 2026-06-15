@@ -1,0 +1,15 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3050:3050"
+    volumes:
+      - flags_cache:/app/cache/flags
+    environment:
+      - PORT=3050
+      - FOOTBALL_DATA_API_KEY=${FOOTBALL_DATA_API_KEY}
+      - WC_JWT_TOKEN=${WC_JWT_TOKEN}
+    restart: unless-stopped
+
+volumes:
+  flags_cache:
