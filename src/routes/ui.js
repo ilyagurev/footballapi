@@ -803,7 +803,7 @@ function renderActiveCard() {
   let minuteRow = '';
   if (isActiveLive || isHT || isFT) {
     const minPart = (minute != null && isActiveLive)
-      ? '<span class="amin-num">' + minute + "' </span><span class=\"amin-sep\">·</span>"
+      ? '<span class="amin-num">' + minute + "' </span><span class='amin-sep'>·</span>"
       : '';
     minuteRow = '<div class="active-min-row">' + minPart + '<span class="amin-lbl">' + esc(statusLabel) + '</span></div>';
   }
