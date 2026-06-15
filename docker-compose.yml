@@ -11,7 +11,16 @@ services:
       - WC_JWT_TOKEN=${WC_JWT_TOKEN}
       - AUTH_SECRET=${AUTH_SECRET:-}
       - TZ=Asia/Dubai
+    networks:
+      - default
+      - web
     restart: unless-stopped
 
 volumes:
   flags_cache:
+
+# 'web' is the shared Caddy reverse-proxy network (external, created by infra stack).
+# Joining it lets Caddy reach this container by name for fifa.qplc.dev.
+networks:
+  web:
+    external: true
