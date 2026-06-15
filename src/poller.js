@@ -1,12 +1,12 @@
 import { state } from './state.js'
-import { getAllMatches, getMatch, getAllTeams } from './sources/worldcup.js'
+import { getAllMatches, getAllTeams } from './sources/worldcup.js'
 import { getLiveMinute, getWCSquad } from './sources/footballdata.js'
 import { getFlagPath } from './flags/converter.js'
 
 const POLL_INTERVAL_MS = 30_000
-const MATCHES_TTL_MS = 5 * 60_000
+const TEAMS_TTL_MS = 60 * 60_000  // teams change rarely — refresh every hour
 
-let matchesRefreshedAt = 0
+let teamsRefreshedAt = 0
 
 export function startPoller() {
   poll()
@@ -15,7 +15,8 @@ export function startPoller() {
 
 async function poll() {
   try {
-    await refreshMatchesIfStale()
+    await refreshTeamsIfStale()
+    await refreshMatches()
     await pollActiveMatch()
     state.lastUpdated = new Date().toISOString()
     state.lastError = null
@@ -25,11 +26,10 @@ async function poll() {
   }
 }
 
-async function refreshMatchesIfStale() {
-  if (Date.now() - matchesRefreshedAt < MATCHES_TTL_MS) return
+async function refreshTeamsIfStale() {
+  if (Date.now() - teamsRefreshedAt < TEAMS_TTL_MS) return
 
-  const [matches, teams] = await Promise.all([getAllMatches(), getAllTeams()])
-
+  const teams = await getAllTeams()
   const teamsMap = {}
   for (const t of teams) {
     teamsMap[t.id] = t
@@ -39,22 +39,30 @@ async function refreshMatchesIfStale() {
       )
     }
   }
-
   state.teamsMap = teamsMap
+  teamsRefreshedAt = Date.now()
+  console.log(`[poller] loaded ${teams.length} teams`)
+}
+
+async function refreshMatches() {
+  const matches = await getAllMatches()
   state.allMatches = matches.map(m => ({
     ...m,
-    home_tla: teamsMap[m.home_team_id]?.fifa_code,
-    away_tla: teamsMap[m.away_team_id]?.fifa_code,
+    home_tla: state.teamsMap[m.home_team_id]?.fifa_code,
+    away_tla: state.teamsMap[m.away_team_id]?.fifa_code,
   }))
-
-  matchesRefreshedAt = Date.now()
-  console.log(`[poller] loaded ${matches.length} matches, ${teams.length} teams`)
+  console.log(`[poller] refreshed ${matches.length} matches`)
 }
 
 async function pollActiveMatch() {
   if (!state.activeMatchId) return
 
-  const match = await getMatch(state.activeMatchId)
+  // Find match in already-loaded list — no extra API call needed
+  const match = state.allMatches.find(m => m.id === state.activeMatchId)
+  if (!match) {
+    console.warn(`[poller] active match ${state.activeMatchId} not found in list`)
+    return
+  }
   state.match = match
 
   const isLive = match.time_elapsed === 'firsthalf' || match.time_elapsed === 'secondhalf'

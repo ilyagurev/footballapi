@@ -22,11 +22,6 @@ export async function getAllMatches() {
   return data.games || []
 }
 
-export async function getMatch(id) {
-  const data = await get(`/get/game/${id}`)
-  return data.game || data
-}
-
 export async function getAllTeams() {
   const data = await get('/get/teams')
   return data.teams || []
