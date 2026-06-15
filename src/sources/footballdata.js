@@ -18,7 +18,16 @@ export async function getLiveMinute(homeTla, awayTla) {
       (m.homeTeam?.tla === homeTla && m.awayTeam?.tla === awayTla) ||
       (m.homeTeam?.tla === awayTla && m.awayTeam?.tla === homeTla)
     )
-    return m?.minute ?? null
+    if (!m) return null
+    if (m.minute != null) return m.minute
+    // Free tier (TIER_ONE) doesn't provide minute — approximate from kickoff UTC
+    if (m.status === 'IN_PLAY' && m.utcDate) {
+      const elapsed = Math.floor((Date.now() - new Date(m.utcDate).getTime()) / 60_000)
+      // Subtract ~15 min for halftime when elapsed suggests 2nd half
+      const approx = elapsed > 60 ? elapsed - 15 : Math.min(45, elapsed)
+      return Math.min(105, Math.max(1, approx))
+    }
+    return null
   } catch {
     return null
   }
