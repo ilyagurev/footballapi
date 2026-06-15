@@ -7,7 +7,7 @@ router.get('/', (_req, res) => {
 })
 
 const HTML = `<!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -51,6 +51,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; bord
 .poll.updating .poll-fg { stroke: var(--text); }
 .poll.updating .poll-num { color: var(--green); }
 @keyframes pollSpin { from { transform: rotate(-90deg); } to { transform: rotate(270deg); } }
+
+.lang-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.lang-switch button { font-family: inherit; font-size: 11px; font-weight: 700; padding: 4px 9px; background: var(--bg3); color: var(--muted); border: none; cursor: pointer; }
+.lang-switch button.on { background: var(--active-border); color: #fff; }
+.lang-switch button:not(.on):hover { color: var(--text); }
 
 .role-tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
 .role-tag.admin { background: #0e2a16; color: var(--green); }
@@ -174,77 +179,167 @@ input[type=text] { flex: 1; }
 <div id="auth-overlay">
   <form class="auth-box" onsubmit="return doLogin(event)">
     <div class="auth-title">⚽ Artes FIFA</div>
-    <div class="auth-sub">Введите пароль для доступа</div>
-    <input type="password" id="auth-pass" placeholder="Пароль" autocomplete="current-password" autofocus>
-    <button type="submit">Войти</button>
+    <div class="auth-sub" data-i18n="auth_sub">Enter password to continue</div>
+    <input type="password" id="auth-pass" placeholder="Password" data-i18n-ph="auth_pass_ph" autocomplete="current-password" autofocus>
+    <button type="submit" data-i18n="auth_login">Sign in</button>
     <div class="auth-err" id="auth-err"></div>
   </form>
 </div>
 <header>
   <span class="logo">⚽ Artes FIFA</span>
   <span class="dot" id="dot"></span>
-  <span class="hdr-info" id="hdr-info">загрузка...</span>
+  <span class="hdr-info" id="hdr-info" data-i18n="hdr_loading">loading...</span>
   <span class="hdr-space"></span>
   <div id="hdr-match"></div>
   <span class="hdr-space"></span>
-  <span class="poll" id="poll" title="Автообновление каждые 10 секунд">
+  <span class="poll" id="poll" data-i18n-title="poll_title" title="Auto-refresh every 10 seconds">
     <svg class="poll-ring" viewBox="0 0 36 36" aria-hidden="true">
       <circle class="poll-bg" cx="18" cy="18" r="15"></circle>
       <circle class="poll-fg" id="poll-arc" cx="18" cy="18" r="15"></circle>
     </svg>
-    <span class="poll-num" id="poll-num">10с</span>
+    <span class="poll-num" id="poll-num">10s</span>
+  </span>
+  <span class="lang-switch">
+    <button data-lang="en" onclick="setLang('en')">EN</button>
+    <button data-lang="ru" onclick="setLang('ru')">RU</button>
   </span>
   <span class="role-tag" id="role-tag" style="display:none"></span>
-  <button class="logout-btn" id="logout-btn" onclick="logout()" style="display:none">Выход</button>
+  <button class="logout-btn" id="logout-btn" onclick="logout()" style="display:none" data-i18n="logout">Log out</button>
 </header>
 
 <div class="layout">
   <div class="left">
     <div class="filters">
       <select id="f-status" onchange="applyFilters()">
-        <option value="all">Все матчи</option>
-        <option value="live">Live</option>
-        <option value="today">Сегодня</option>
-        <option value="upcoming">Предстоящие</option>
-        <option value="finished">Завершённые</option>
+        <option value="all" data-i18n="f_status_all">All matches</option>
+        <option value="live" data-i18n="f_status_live">Live</option>
+        <option value="today" data-i18n="f_status_today">Today</option>
+        <option value="upcoming" data-i18n="f_status_upcoming">Upcoming</option>
+        <option value="finished" data-i18n="f_status_finished">Finished</option>
       </select>
       <select id="f-group" onchange="applyFilters()">
-        <option value="all">Все группы</option>
+        <option value="all" data-i18n="f_group_all">All groups</option>
       </select>
       <select id="f-sort" onchange="applyFilters()">
-        <option value="time">По времени</option>
-        <option value="group">По группе</option>
-        <option value="status">По статусу</option>
-        <option value="team">По команде</option>
+        <option value="time" data-i18n="f_sort_time">By time</option>
+        <option value="group" data-i18n="f_sort_group">By group</option>
+        <option value="status" data-i18n="f_sort_status">By status</option>
+        <option value="team" data-i18n="f_sort_team">By team</option>
       </select>
-      <input type="text" id="f-search" placeholder="Поиск команды…" oninput="applyFilters()">
+      <input type="text" id="f-search" placeholder="Search team…" data-i18n-ph="f_search_ph" oninput="applyFilters()">
     </div>
     <div class="match-list" id="match-list">
-      <div style="padding:20px;color:var(--muted)">Загрузка...</div>
+      <div style="padding:20px;color:var(--muted)" data-i18n="loading">Loading...</div>
     </div>
   </div>
 
   <div class="right">
     <div>
-      <div class="panel-title" id="match-panel-title">Активный матч</div>
+      <div class="panel-title" id="match-panel-title">Active match</div>
       <div id="active-card"></div>
     </div>
     <div>
-      <div class="panel-title">Состав</div>
+      <div class="panel-title" data-i18n="lineup">Lineup</div>
       <div class="lineup-tabs">
-        <button class="tab-btn on" id="tab-home" onclick="setTab('home')">Хозяева</button>
-        <button class="tab-btn" id="tab-away" onclick="setTab('away')">Гости</button>
+        <button class="tab-btn on" id="tab-home" onclick="setTab('home')" data-i18n="tab_home">Home</button>
+        <button class="tab-btn" id="tab-away" onclick="setTab('away')" data-i18n="tab_away">Away</button>
       </div>
       <div class="lineup-list" id="lineup"></div>
     </div>
     <div id="endpoints-block">
-      <div class="panel-title">DataSource URL для vMix</div>
+      <div class="panel-title" data-i18n="datasource">DataSource URL for vMix</div>
       <div class="endpoints" id="endpoints"></div>
     </div>
   </div>
 </div>
 
 <script>
+const I18N = {
+  en: {
+    auth_sub: 'Enter password to continue', auth_pass_ph: 'Password', auth_login: 'Sign in',
+    auth_err_wrong: 'Wrong password', auth_err_conn: 'Connection error',
+    hdr_loading: 'loading...', poll_title: 'Auto-refresh every 10 seconds',
+    role_admin: 'air + view', role_viewer: 'view only', logout: 'Log out',
+    f_status_all: 'All matches', f_status_live: 'Live', f_status_today: 'Today',
+    f_status_upcoming: 'Upcoming', f_status_finished: 'Finished', f_group_all: 'All groups',
+    f_sort_time: 'By time', f_sort_group: 'By group', f_sort_status: 'By status', f_sort_team: 'By team',
+    f_search_ph: 'Search team…', loading: 'Loading...', lineup: 'Lineup',
+    tab_home: 'Home', tab_away: 'Away', datasource: 'DataSource URL for vMix',
+    just_now: 'just now', sec_ago: 's ago', sec_short: 's', error_prefix: 'Error: ',
+    no_data: 'No data', no_matches: 'No matches', no_lineup: 'No data',
+    group_word: 'Group', grp_live: '🔴 Live', grp_finished: '✓ Finished', grp_upcoming: '⏳ Upcoming',
+    badge_h1: '1H', badge_h2: '2H', air_on: '● on air', air_send: 'Go live',
+    panel_match: 'Match', panel_active: 'Active match', panel_preview: 'Preview',
+    card_hint: 'Click a row to preview;<br>the «Go live» button sends it to vMix.',
+    st_firsthalf: '1st half', st_secondhalf: '2nd half', st_halftime: 'Half-time',
+    st_finished: 'Finished', st_notstarted: 'Not started',
+    banner_onair: '● ON AIR (vMix)', banner_preview: 'Preview — not on air',
+    copy: 'Copy', copied: '✓ Copied', copy_manual: 'Select manually',
+    confirm_air_pre: 'Send to vMix (on air):\\n', confirm_air_post: '?', this_match: 'this match',
+  },
+  ru: {
+    auth_sub: 'Введите пароль для доступа', auth_pass_ph: 'Пароль', auth_login: 'Войти',
+    auth_err_wrong: 'Неверный пароль', auth_err_conn: 'Ошибка соединения',
+    hdr_loading: 'загрузка...', poll_title: 'Автообновление каждые 10 секунд',
+    role_admin: 'эфир + просмотр', role_viewer: 'только просмотр', logout: 'Выход',
+    f_status_all: 'Все матчи', f_status_live: 'Live', f_status_today: 'Сегодня',
+    f_status_upcoming: 'Предстоящие', f_status_finished: 'Завершённые', f_group_all: 'Все группы',
+    f_sort_time: 'По времени', f_sort_group: 'По группе', f_sort_status: 'По статусу', f_sort_team: 'По команде',
+    f_search_ph: 'Поиск команды…', loading: 'Загрузка...', lineup: 'Состав',
+    tab_home: 'Хозяева', tab_away: 'Гости', datasource: 'DataSource URL для vMix',
+    just_now: 'только что', sec_ago: ' сек назад', sec_short: 'с', error_prefix: 'Ошибка: ',
+    no_data: 'Нет данных', no_matches: 'Нет матчей', no_lineup: 'Нет данных',
+    group_word: 'Группа', grp_live: '🔴 Live', grp_finished: '✓ Завершённые', grp_upcoming: '⏳ Предстоящие',
+    badge_h1: '1Т', badge_h2: '2Т', air_on: '● эфир', air_send: 'В эфир',
+    panel_match: 'Матч', panel_active: 'Активный матч', panel_preview: 'Просмотр',
+    card_hint: 'Кликните строку для просмотра,<br>кнопка «В эфир» отправит матч в vMix.',
+    st_firsthalf: '1-й тайм', st_secondhalf: '2-й тайм', st_halftime: 'Перерыв',
+    st_finished: 'Завершён', st_notstarted: 'Не начат',
+    banner_onair: '● В ЭФИРЕ (vMix)', banner_preview: 'Просмотр — не в эфире',
+    copy: 'Копировать', copied: '✓ Скопировано', copy_manual: 'Выделите вручную',
+    confirm_air_pre: 'Отправить в эфир (vMix):\\n', confirm_air_post: '?', this_match: 'этот матч',
+  },
+};
+
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function setCookie(name, val, days) {
+  document.cookie = name + '=' + encodeURIComponent(val) + '; Path=/; Max-Age=' + (days * 86400) + '; SameSite=Lax';
+}
+
+let LANG = (getCookie('lang') === 'ru') ? 'ru' : 'en';   // default English
+function t(key) { return (I18N[LANG] && I18N[LANG][key]) || I18N.en[key] || key; }
+function dateLocale() { return LANG === 'ru' ? 'ru-RU' : 'en-GB'; }
+
+function applyStaticI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(function(el) { el.textContent = t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(function(el) { el.placeholder = t(el.getAttribute('data-i18n-ph')); });
+  document.querySelectorAll('[data-i18n-title]').forEach(function(el) { el.title = t(el.getAttribute('data-i18n-title')); });
+  document.documentElement.lang = LANG;
+  updateLangSwitch();
+  updateRoleTag();
+}
+function updateLangSwitch() {
+  document.querySelectorAll('.lang-switch button').forEach(function(b) {
+    b.classList.toggle('on', b.getAttribute('data-lang') === LANG);
+  });
+}
+function updateRoleTag() {
+  const tag = document.getElementById('role-tag');
+  if (!tag || !ROLE) return;
+  tag.textContent = ROLE === 'admin' ? t('role_admin') : t('role_viewer');
+}
+function setLang(lang) {
+  if (lang !== 'ru' && lang !== 'en') return;
+  LANG = lang;
+  setCookie('lang', lang, 365);
+  applyStaticI18n();
+  if (S) render();
+  renderHeader();
+}
+
 let S = null;
 let lineupTab = 'home';
 let previewId = null;      // match clicked for viewing (client-only, NOT sent to vMix)
@@ -266,7 +361,7 @@ function tickPoll() {
   const remainMs = Math.max(0, nextPollAt - Date.now());
   const frac = remainMs / POLL_MS;                 // 1 → 0
   arc.style.strokeDashoffset = String(POLL_CIRC * (1 - frac));  // full → empty
-  num.textContent = Math.ceil(remainMs / 1000) + 'с';
+  num.textContent = Math.ceil(remainMs / 1000) + t('sec_short');
 }
 
 // Brief flash/spin when fresh data arrives
@@ -339,7 +434,7 @@ function showApp() {
   const tag = document.getElementById('role-tag');
   tag.style.display = '';
   tag.className = 'role-tag ' + (ROLE === 'admin' ? 'admin' : 'viewer');
-  tag.textContent = ROLE === 'admin' ? 'эфир + просмотр' : 'только просмотр';
+  updateRoleTag();
   fetchState();
   if (!polling) {
     polling = true;
@@ -365,10 +460,10 @@ async function doLogin(ev) {
       ROLE = d.role;
       showApp();
     } else {
-      errEl.textContent = 'Неверный пароль';
+      errEl.textContent = t('auth_err_wrong');
     }
   } catch (e) {
-    errEl.textContent = 'Ошибка соединения';
+    errEl.textContent = t('auth_err_conn');
   }
   return false;
 }
@@ -387,7 +482,7 @@ async function fetchState() {
     render();
     flashPoll();
   } catch (e) {
-    document.getElementById('hdr-info').textContent = 'Ошибка соединения';
+    document.getElementById('hdr-info').textContent = t('auth_err_conn');
   }
 }
 
@@ -410,7 +505,7 @@ function renderHeaderMatch() {
   const isLive = e === 'firsthalf' || e === 'secondhalf' || e === 'halftime';
   const isFT = e === 'finished';
   const min = isLive && S.minute ? S.minute + "'" : null;
-  const statusLabel = min || (e === 'firsthalf' ? '1T' : e === 'secondhalf' ? '2T' : e === 'halftime' ? 'HT' : '');
+  const statusLabel = min || (e === 'firsthalf' ? t('badge_h1') : e === 'secondhalf' ? t('badge_h2') : e === 'halftime' ? 'HT' : '');
   el.innerHTML =
     '<span style="color:var(--muted)">' + esc(m.home_team_name_en) + '</span>' +
     '<span class="hdr-match-score">' + score + '</span>' +
@@ -425,12 +520,12 @@ function renderHeader() {
   if (!S) return;
   if (S.lastError) {
     dot.className = 'dot err';
-    info.textContent = 'Ошибка: ' + S.lastError;
+    info.textContent = t('error_prefix') + S.lastError;
   } else if (S.lastUpdated) {
     dot.className = 'dot';
     const d = new Date(S.lastUpdated);
     const sec = Math.round((Date.now() - d) / 1000);
-    info.textContent = sec < 5 ? 'только что' : sec + ' сек назад';
+    info.textContent = sec < 5 ? t('just_now') : sec + t('sec_ago');
   }
   renderHeaderMatch();
 }
@@ -440,7 +535,7 @@ function populateGroupFilter() {
   const current = sel.value;
   const groups = [...new Set((S.allMatches || []).map(m => m.group).filter(Boolean))];
   groups.sort();
-  sel.innerHTML = '<option value="all">Все группы</option>' +
+  sel.innerHTML = '<option value="all">' + esc(t('f_group_all')) + '</option>' +
     groups.map(g => '<option value="' + g + '"' + (g === current ? ' selected' : '') + '>' + g + '</option>').join('');
 }
 
@@ -485,17 +580,17 @@ function groupMatches(matches, sort) {
   for (const m of matches) {
     let key;
     if (sort === 'group') {
-      key = 'Группа ' + (m.group || '—');
+      key = t('group_word') + ' ' + (m.group || '—');
     } else if (sort === 'status') {
       const e = m.time_elapsed || 'notstarted';
-      key = (e === 'firsthalf' || e === 'secondhalf' || e === 'halftime') ? '🔴 Live'
-          : e === 'finished' ? '✓ Завершённые'
-          : '⏳ Предстоящие';
+      key = (e === 'firsthalf' || e === 'secondhalf' || e === 'halftime') ? t('grp_live')
+          : e === 'finished' ? t('grp_finished')
+          : t('grp_upcoming');
     } else if (sort === 'team') {
       key = (m.home_team_name_en || '—')[0].toUpperCase();
     } else {
       const dt = parseDate(m.local_date, m.venue_utc_offset);
-      key = dt ? dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', timeZone: 'Asia/Dubai' }) : '—';
+      key = dt ? dt.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long', timeZone: 'Asia/Dubai' }) : '—';
     }
     (groups[key] = groups[key] || []).push(m);
   }
@@ -554,21 +649,21 @@ function parseDate(localDate, utcOffset) {
 
 function renderMatchList() {
   if (!S?.allMatches?.length) {
-    document.getElementById('match-list').innerHTML = '<div style="padding:20px;color:var(--muted)">Нет данных</div>';
+    document.getElementById('match-list').innerHTML = '<div style="padding:20px;color:var(--muted)">' + esc(t('no_data')) + '</div>';
     return;
   }
 
   const { sort } = getFilters();
   const matches = sortMatches(filterMatches(S.allMatches), sort);
   if (!matches.length) {
-    document.getElementById('match-list').innerHTML = '<div style="padding:20px;color:var(--muted)">Нет матчей</div>';
+    document.getElementById('match-list').innerHTML = '<div style="padding:20px;color:var(--muted)">' + esc(t('no_matches')) + '</div>';
     return;
   }
 
   const grouped = groupMatches(matches, sort);
   let html = '';
   for (const [label, ms] of Object.entries(grouped)) {
-    const extra = sort === 'time' ? ' &nbsp;·&nbsp; Группа ' + esc(ms[0]?.group || '') : '';
+    const extra = sort === 'time' ? ' &nbsp;·&nbsp; ' + esc(t('group_word')) + ' ' + esc(ms[0]?.group || '') : '';
     html += '<div class="group-label">' + esc(label) + extra + '</div>';
     for (const m of ms) html += matchRow(m);
   }
@@ -581,7 +676,7 @@ function matchRow(m) {
   const viewedId = previewId || S.activeMatchId;
   const isPreview = viewedId === m.id;
   const dt = parseDate(m.local_date, m.venue_utc_offset);
-  const time = dt ? dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '';
+  const time = dt ? dt.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '';
   const score = (m.finished === 'TRUE' || m.time_elapsed !== 'notstarted')
     ? esc(m.home_score) + ' – ' + esc(m.away_score)
     : '– : –';
@@ -592,9 +687,9 @@ function matchRow(m) {
 
   let airBtn = '';
   if (isVmix) {
-    airBtn = '<button class="sel-btn vmix" disabled>● эфир</button>';
+    airBtn = '<button class="sel-btn vmix" disabled>' + esc(t('air_on')) + '</button>';
   } else if (canAir()) {
-    airBtn = '<button class="sel-btn" data-mid="' + esc(m.id) + '" onclick="event.stopPropagation(); handleSelect(this)">в эфир</button>';
+    airBtn = '<button class="sel-btn" data-mid="' + esc(m.id) + '" onclick="event.stopPropagation(); handleSelect(this)">' + esc(t('air_send')) + '</button>';
   }
 
   return \`<div class="\${cls}" data-mid="\${m.id}" onclick="handleRowClick(this)">
@@ -618,13 +713,13 @@ function statusBadge(m) {
   const min = isActive && S.minute ? S.minute + "'" : null;
 
   if (e === 'firsthalf' || e === 'secondhalf') {
-    return '<span class="badge badge-live">' + (min || (e === 'firsthalf' ? '1T' : '2T')) + '</span>';
+    return '<span class="badge badge-live">' + (min || (e === 'firsthalf' ? t('badge_h1') : t('badge_h2'))) + '</span>';
   }
   if (e === 'halftime') return '<span class="badge badge-ht">HT</span>';
   if (e === 'finished') return '<span class="badge badge-ft">FT</span>';
 
   const dt = parseDate(m.local_date, m.venue_utc_offset);
-  const label = dt ? dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '—';
+  const label = dt ? dt.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '—';
   return '<span class="badge badge-ns">' + label + '</span>';
 }
 
@@ -635,31 +730,31 @@ function renderActiveCard() {
   const m = vm.match;
 
   if (!m) {
-    titleEl.textContent = 'Матч';
-    el.innerHTML = '<div class="no-match">Кликните строку для просмотра,<br>кнопка «в эфир» отправит матч в vMix.</div>';
+    titleEl.textContent = t('panel_match');
+    el.innerHTML = '<div class="no-match">' + t('card_hint') + '</div>';
     return;
   }
 
   const homeFlag = '/flags/' + esc(m.home_team_id) + '.jpg';
   const awayFlag = '/flags/' + esc(m.away_team_id) + '.jpg';
   const minLabel = (vm.isVmix && S.minute != null) ? S.minute + "' " : '';
-  const statusLabel = { firsthalf: '1-й тайм', secondhalf: '2-й тайм', halftime: 'Перерыв', finished: 'Завершён', notstarted: 'Не начат' }[m.time_elapsed] || m.time_elapsed || '';
+  const statusLabel = { firsthalf: t('st_firsthalf'), secondhalf: t('st_secondhalf'), halftime: t('st_halftime'), finished: t('st_finished'), notstarted: t('st_notstarted') }[m.time_elapsed] || m.time_elapsed || '';
   const dt = parseDate(m.local_date, m.venue_utc_offset);
-  const kickoff = dt ? dt.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '';
+  const kickoff = dt ? dt.toLocaleString(dateLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '';
   const rightMeta = (m.time_elapsed === 'notstarted' || !m.time_elapsed)
     ? '🕐 ' + esc(kickoff)
     : minLabel + statusLabel;
 
   let banner;
   if (vm.isVmix) {
-    titleEl.textContent = 'Активный матч';
-    banner = '<div class="view-banner on-air"><span>● В ЭФИРЕ (vMix)</span></div>';
+    titleEl.textContent = t('panel_active');
+    banner = '<div class="view-banner on-air"><span>' + esc(t('banner_onair')) + '</span></div>';
   } else {
-    titleEl.textContent = 'Просмотр';
+    titleEl.textContent = t('panel_preview');
     const airBtn = canAir()
-      ? '<button class="send-air-btn" data-mid="' + esc(m.id) + '" onclick="handleSelect(this)">▶ В эфир</button>'
+      ? '<button class="send-air-btn" data-mid="' + esc(m.id) + '" onclick="handleSelect(this)">▶ ' + esc(t('air_send')) + '</button>'
       : '';
-    banner = '<div class="view-banner preview"><span>Просмотр — не в эфире</span>' + airBtn + '</div>';
+    banner = '<div class="view-banner preview"><span>' + esc(t('banner_preview')) + '</span>' + airBtn + '</div>';
   }
 
   el.innerHTML = banner + \`<div class="active-card framed">
@@ -675,7 +770,7 @@ function renderActiveCard() {
       </div>
     </div>
     <div class="active-meta">
-      <span class="active-group">Группа \${esc(m.group || '')}</span>
+      <span class="active-group">\${esc(t('group_word'))} \${esc(m.group || '')}</span>
       <span class="active-min">\${rightMeta}</span>
     </div>
   </div>\`;
@@ -694,7 +789,7 @@ function renderLineup() {
   const players = lineupTab === 'home' ? vm.home : vm.away;
 
   if (!players.length) {
-    el.innerHTML = '<div class="no-lineup">Нет данных</div>';
+    el.innerHTML = '<div class="no-lineup">' + esc(t('no_lineup')) + '</div>';
     return;
   }
 
@@ -733,7 +828,7 @@ function renderEndpoints() {
     <div class="ep">
       <span class="ep-method">\${e.method}</span>
       <span class="ep-path">\${esc(host + e.path)}</span>
-      <button class="ep-copy" data-url="\${esc(host + e.path)}" onclick="copyEp(this)">Копировать</button>
+      <button class="ep-copy" data-url="\${esc(host + e.path)}" onclick="copyEp(this)">\${esc(t('copy'))}</button>
     </div>\`).join('');
 }
 
@@ -742,7 +837,7 @@ function copyEp(el) {
   copyText(text).then(function(ok) {
     const prev = el.textContent;
     el.classList.add('copy-ok');
-    el.textContent = ok ? '✓ Скопировано' : 'Выделите вручную';
+    el.textContent = ok ? t('copied') : t('copy_manual');
     if (!ok) selectUrlText(el);
     setTimeout(function() { el.classList.remove('copy-ok'); el.textContent = prev; }, 1500);
   });
@@ -791,8 +886,8 @@ function handleSelect(btn) {
 
 async function selectMatch(id) {
   const match = S && S.allMatches && S.allMatches.find(function(m) { return m.id === id; });
-  const label = match ? match.home_team_name_en + ' vs ' + match.away_team_name_en : 'этот матч';
-  if (!confirm('Отправить в эфир (vMix):\\n' + label + '?')) return;
+  const label = match ? match.home_team_name_en + ' vs ' + match.away_team_name_en : t('this_match');
+  if (!confirm(t('confirm_air_pre') + label + t('confirm_air_post'))) return;
   await fetch('/api/select/' + id, { method: 'POST' });
   previewId = null;
   previewData = null;
@@ -803,6 +898,7 @@ function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+applyStaticI18n();
 init();
 </script>
 </body>
