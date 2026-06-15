@@ -1,3 +1,5 @@
+import { fetchJsonRetry } from '../lib/http.js'
+
 const BASE = 'https://api.football-data.org/v4'
 
 function headers() {
@@ -6,12 +8,12 @@ function headers() {
 
 export async function getLiveMinute(homeTla, awayTla) {
   try {
-    const res = await fetch(`${BASE}/matches?status=IN_PLAY,PAUSED`, {
+    const { matches = [] } = await fetchJsonRetry(`${BASE}/matches?status=IN_PLAY,PAUSED`, {
       headers: headers(),
-      signal: AbortSignal.timeout(10_000),
+      timeoutMs: 10_000,
+      retries: 1,
+      label: 'football-data live',
     })
-    if (!res.ok) return null
-    const { matches = [] } = await res.json()
     const m = matches.find(m =>
       (m.homeTeam?.tla === homeTla && m.awayTeam?.tla === awayTla) ||
       (m.homeTeam?.tla === awayTla && m.awayTeam?.tla === homeTla)
@@ -23,12 +25,12 @@ export async function getLiveMinute(homeTla, awayTla) {
 }
 
 export async function getWCSquad(tla) {
-  const res = await fetch(`${BASE}/competitions/WC/teams`, {
+  const { teams = [] } = await fetchJsonRetry(`${BASE}/competitions/WC/teams`, {
     headers: headers(),
-    signal: AbortSignal.timeout(15_000),
+    timeoutMs: 15_000,
+    retries: 2,
+    label: 'football-data WC/teams',
   })
-  if (!res.ok) throw new Error(`football-data.org /competitions/WC/teams: HTTP ${res.status}`)
-  const { teams = [] } = await res.json()
 
   const team = teams.find(t => t.tla === tla)
   if (!team?.squad?.length) return []

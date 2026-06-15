@@ -5,8 +5,11 @@ import { getFlagPath } from './flags/converter.js'
 
 const POLL_INTERVAL_MS = 10_000
 const TEAMS_TTL_MS = 60 * 60_000  // teams change rarely — refresh every hour
+const FAILURE_THRESHOLD = 2       // surface an error only after N consecutive bad cycles
 
 let teamsRefreshedAt = 0
+let consecutiveFailures = 0
+let lastMatchCount = -1
 
 export function startPoller() {
   poll()
@@ -17,15 +20,41 @@ export function startPoller() {
 const REGION_UTC_OFFSET = { Eastern: -4, Central: -5, Western: -7 }
 
 async function poll() {
+  // Each step is isolated so one source failing doesn't wipe the others.
+  // Matches/teams are critical (drive the whole UI); active-match enrichment is not.
+  let critical = null
+
   try {
     await refreshTeamsIfStale()
-    await refreshMatches()
-    await pollActiveMatch()
-    state.lastUpdated = new Date().toISOString()
-    state.lastError = null
   } catch (err) {
-    console.error('[poller]', err.message)
-    state.lastError = err.message
+    critical = err
+    console.warn('[poller] teams/stadiums refresh failed:', err.message)
+  }
+
+  let matchesOk = false
+  try {
+    await refreshMatches()
+    matchesOk = true
+  } catch (err) {
+    critical = err
+    console.warn('[poller] matches refresh failed:', err.message)
+  }
+
+  try {
+    await pollActiveMatch()
+  } catch (err) {
+    console.warn('[poller] active-match update failed (non-critical):', err.message)
+  }
+
+  if (matchesOk) state.lastUpdated = new Date().toISOString()
+
+  if (critical) {
+    consecutiveFailures++
+    // Debounce: don't flag the UI red on a single transient timeout — only after repeats
+    if (consecutiveFailures >= FAILURE_THRESHOLD) state.lastError = critical.message
+  } else {
+    consecutiveFailures = 0
+    state.lastError = null
   }
 }
 
@@ -61,7 +90,11 @@ async function refreshMatches() {
     away_tla: state.teamsMap[m.away_team_id]?.fifa_code,
     venue_utc_offset: state.stadiumsMap[m.stadium_id]?.utcOffset ?? null,
   }))
-  console.log(`[poller] refreshed ${matches.length} matches`)
+  // Log only when the count changes — avoids flooding logs every 10s
+  if (matches.length !== lastMatchCount) {
+    console.log(`[poller] matches: ${matches.length}`)
+    lastMatchCount = matches.length
+  }
 }
 
 async function pollActiveMatch() {
@@ -80,6 +113,8 @@ async function pollActiveMatch() {
     const homeTla = state.teamsMap[match.home_team_id]?.fifa_code
     const awayTla = state.teamsMap[match.away_team_id]?.fifa_code
     if (homeTla && awayTla) {
+      // getLiveMinute already swallows its own errors and returns null —
+      // keep the previous minute on a hiccup rather than blanking it
       const minute = await getLiveMinute(homeTla, awayTla)
       if (minute != null) state.minute = minute
     }

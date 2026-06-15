@@ -1,3 +1,5 @@
+import { fetchJsonRetry } from '../lib/http.js'
+
 const BASE = 'https://worldcup26.ir'
 
 function headers() {
@@ -9,12 +11,12 @@ function headers() {
 }
 
 async function get(path) {
-  const res = await fetch(`${BASE}${path}`, {
+  return fetchJsonRetry(`${BASE}${path}`, {
     headers: headers(),
-    signal: AbortSignal.timeout(10_000),
+    timeoutMs: 12_000,
+    retries: 2,
+    label: `worldcup26.ir ${path}`,
   })
-  if (!res.ok) throw new Error(`worldcup26.ir ${path}: HTTP ${res.status}`)
-  return res.json()
 }
 
 export async function getAllMatches() {
