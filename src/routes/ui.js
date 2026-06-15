@@ -122,7 +122,8 @@ input[type=text] { flex: 1; }
 .ep-copy:hover { color: var(--text); }
 .copy-ok { color: var(--green) !important; }
 
-.hdr-match { display: flex; align-items: center; gap: 8px; padding: 4px 12px; background: var(--active-bg); border: 1px solid var(--active-border); border-radius: 8px; font-size: 12px; }
+#hdr-match { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+#hdr-match:not(:empty) { padding: 4px 12px; background: var(--active-bg); border: 1px solid var(--active-border); border-radius: 8px; }
 .hdr-match-score { font-family: var(--mono); font-weight: 700; color: var(--text); }
 .hdr-match-live { color: var(--live); font-weight: 700; font-size: 11px; }
 .hdr-match-ft { color: var(--done); font-size: 11px; }
