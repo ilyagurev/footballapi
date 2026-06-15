@@ -108,7 +108,7 @@ async function pollActiveMatch() {
   }
   state.match = match
 
-  const isLive = match.time_elapsed === 'firsthalf' || match.time_elapsed === 'secondhalf'
+  const isLive = match.time_elapsed === 'firsthalf' || match.time_elapsed === 'secondhalf' || match.time_elapsed === 'live'
   if (isLive) {
     const homeTla = state.teamsMap[match.home_team_id]?.fifa_code
     const awayTla = state.teamsMap[match.away_team_id]?.fifa_code
