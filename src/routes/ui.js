@@ -109,15 +109,15 @@ input[type=text] { flex: 1; }
 .send-air-btn:hover { background: var(--green); color: #fff; }
 .active-card.framed { border-radius: 0 0 10px 10px; border-top: none; }
 
-.right { width: 380px; flex-shrink: 0; display: flex; flex-direction: column; overflow-y: auto; padding: 14px 14px; gap: 16px; background: var(--bg2); }
+.right { width: 460px; flex-shrink: 0; display: flex; flex-direction: column; overflow-y: auto; padding: 14px 16px; gap: 16px; background: var(--bg2); }
 .panel-title { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
 
 .active-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
-.active-teams { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.active-team { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; }
+.active-teams { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.active-team { display: flex; flex-direction: column; align-items: center; gap: 8px; flex: 1; min-width: 0; }
 .active-flag { width: 96px; height: 64px; object-fit: cover; border-radius: 4px; border: 1px solid var(--border); }
 .active-name { font-size: 13px; color: var(--muted); text-align: center; }
-.active-score { font-size: 38px; font-weight: 700; font-family: var(--mono); padding: 0 12px; }
+.active-score { font-size: 38px; font-weight: 700; font-family: var(--mono); padding: 0 14px; white-space: nowrap; flex-shrink: 0; }
 .active-meta { display: flex; justify-content: space-between; font-size: 12px; }
 .active-group { color: var(--muted); }
 .active-min { color: var(--live); font-weight: 600; }
