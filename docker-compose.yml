@@ -5,6 +5,7 @@ services:
       - "3050:3050"
     volumes:
       - flags_cache:/app/cache/flags
+      - state_data:/app/data
     environment:
       - PORT=3050
       - FOOTBALL_DATA_API_KEY=${FOOTBALL_DATA_API_KEY}
@@ -18,6 +19,7 @@ services:
 
 volumes:
   flags_cache:
+  state_data:
 
 # 'web' is the shared Caddy reverse-proxy network (external, created by infra stack).
 # Joining it lets Caddy reach this container by name for fifa.qplc.dev.

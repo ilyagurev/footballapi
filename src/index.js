@@ -4,6 +4,7 @@ import { ensureCacheDir } from './flags/converter.js'
 import { startPoller, lineupsForMatch } from './poller.js'
 import { state } from './state.js'
 import { roleForPassword, getRole, sessionCookie, clearCookie, requireAuth, requireAdmin } from './auth.js'
+import { loadActiveMatchId, saveActiveMatchId } from './persist.js'
 import vmixRoutes from './routes/vmix.js'
 import flagsRoutes from './routes/flags.js'
 import uiRoutes from './routes/ui.js'
@@ -49,6 +50,7 @@ app.post('/api/select/:id', requireAdmin, (req, res) => {
   state.activeMatchId = id
   state.lineupsForMatchId = null
   state.minute = null
+  saveActiveMatchId(id)  // persist so the on-air match survives restarts
   console.log('[api] selected match', id)
   res.json({ ok: true, matchId: id })
 })
@@ -83,6 +85,14 @@ app.use('/', uiRoutes)
 
 async function main() {
   await ensureCacheDir()
+
+  // Restore the on-air match from disk so a restart/redeploy doesn't blank vMix
+  const restored = await loadActiveMatchId()
+  if (restored) {
+    state.activeMatchId = restored
+    console.log('[persist] restored on-air match', restored)
+  }
+
   startPoller()
   app.listen(PORT, () => {
     console.log(`⚽ vMix Bridge → http://localhost:${PORT}`)
