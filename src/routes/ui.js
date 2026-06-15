@@ -312,7 +312,7 @@ function matchRow(m) {
     </div>
     <div class="match-score">\${score}</div>
     \${badge}
-    <button class="sel-btn\${isActive ? ' active' : ''}" onclick="\${isActive ? '' : 'selectMatch(' + JSON.stringify(m.id) + ')'}">\${isActive ? 'активен' : 'выбрать'}</button>
+    <button class="sel-btn\${isActive ? ' active' : ''}" data-mid="\${m.id}" \${isActive ? 'disabled' : 'onclick="handleSelect(this)"'}>\${isActive ? 'активен' : 'выбрать'}</button>
   </div>\`;
 }
 
@@ -419,6 +419,10 @@ function copyEp(el, text) {
     el.textContent = '✓';
     setTimeout(() => { el.classList.remove('copy-ok'); el.textContent = '⎘'; }, 1500);
   });
+}
+
+function handleSelect(btn) {
+  selectMatch(btn.dataset.mid);
 }
 
 async function selectMatch(id) {
