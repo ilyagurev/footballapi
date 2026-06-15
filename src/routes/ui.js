@@ -316,18 +316,20 @@ function filterMatches(matches) {
 function parseDate(localDate, utcOffset) {
   if (!localDate) return null;
   try {
-    const m = localDate.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2})$/);
-    if (!m) return new Date(localDate);
-    const [, mm, dd, yyyy, hhmm] = m;
+    const parts = localDate.split(' ');
+    if (parts.length < 2) return null;
+    const dp = parts[0].split('/');
+    const hhmm = parts[1];
+    if (dp.length < 3) return null;
+    const [mm, dd, yyyy] = dp;
     if (utcOffset == null) {
-      // fallback: treat as UTC to avoid random browser-local interpretation
-      return new Date(\`\${yyyy}-\${mm}-\${dd}T\${hhmm}:00Z\`);
+      return new Date(yyyy + '-' + mm + '-' + dd + 'T' + hhmm + ':00Z');
     }
     const sign = utcOffset >= 0 ? '+' : '-';
     const abs = Math.abs(utcOffset);
     const ohh = String(Math.floor(abs)).padStart(2, '0');
     const omm = String(Math.round((abs % 1) * 60)).padStart(2, '0');
-    return new Date(\`\${yyyy}-\${mm}-\${dd}T\${hhmm}:00\${sign}\${ohh}:\${omm}\`);
+    return new Date(yyyy + '-' + mm + '-' + dd + 'T' + hhmm + ':00' + sign + ohh + ':' + omm);
   } catch {
     return null;
   }
