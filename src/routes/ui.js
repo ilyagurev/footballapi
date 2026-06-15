@@ -129,7 +129,7 @@ input[type=text] { flex: 1; }
   <span class="dot" id="dot"></span>
   <span class="hdr-info" id="hdr-info">загрузка...</span>
   <span class="hdr-space"></span>
-  <span class="hdr-info">опрос каждые 30 сек</span>
+  <span class="hdr-info">опрос каждые 10 сек</span>
 </header>
 
 <div class="layout">
@@ -144,6 +144,12 @@ input[type=text] { flex: 1; }
       </select>
       <select id="f-group" onchange="applyFilters()">
         <option value="all">Все группы</option>
+      </select>
+      <select id="f-sort" onchange="applyFilters()">
+        <option value="time">По времени</option>
+        <option value="group">По группе</option>
+        <option value="status">По статусу</option>
+        <option value="team">По команде</option>
       </select>
       <input type="text" id="f-search" placeholder="Поиск команды…" oninput="applyFilters()">
     </div>
@@ -227,8 +233,56 @@ function getFilters() {
   return {
     status: document.getElementById('f-status').value,
     group: document.getElementById('f-group').value,
+    sort: document.getElementById('f-sort').value,
     search: document.getElementById('f-search').value.toLowerCase().trim(),
   };
+}
+
+const GROUP_ORDER = ['A','B','C','D','E','F','G','H','I','J','K','L','R32','R16','QF','SF','3RD','FINAL'];
+const STATUS_RANK = { firsthalf: 0, secondhalf: 0, halftime: 0, notstarted: 1, finished: 2 };
+
+function sortMatches(matches, sort) {
+  const copy = [...matches];
+  if (sort === 'time') {
+    copy.sort((a, b) => (parseDate(a.local_date) || 0) - (parseDate(b.local_date) || 0));
+  } else if (sort === 'group') {
+    copy.sort((a, b) => {
+      const ga = GROUP_ORDER.indexOf(a.group), gb = GROUP_ORDER.indexOf(b.group);
+      return (ga === -1 ? 99 : ga) - (gb === -1 ? 99 : gb) ||
+             (parseDate(a.local_date) || 0) - (parseDate(b.local_date) || 0);
+    });
+  } else if (sort === 'status') {
+    copy.sort((a, b) => {
+      const ra = STATUS_RANK[a.time_elapsed || 'notstarted'] ?? 1;
+      const rb = STATUS_RANK[b.time_elapsed || 'notstarted'] ?? 1;
+      return ra - rb || (parseDate(a.local_date) || 0) - (parseDate(b.local_date) || 0);
+    });
+  } else if (sort === 'team') {
+    copy.sort((a, b) => (a.home_team_name_en || '').localeCompare(b.home_team_name_en || ''));
+  }
+  return copy;
+}
+
+function groupMatches(matches, sort) {
+  const groups = {};
+  for (const m of matches) {
+    let key;
+    if (sort === 'group') {
+      key = 'Группа ' + (m.group || '—');
+    } else if (sort === 'status') {
+      const e = m.time_elapsed || 'notstarted';
+      key = (e === 'firsthalf' || e === 'secondhalf' || e === 'halftime') ? '🔴 Live'
+          : e === 'finished' ? '✓ Завершённые'
+          : '⏳ Предстоящие';
+    } else if (sort === 'team') {
+      key = (m.home_team_name_en || '—')[0].toUpperCase();
+    } else {
+      const dt = parseDate(m.local_date);
+      key = dt ? dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', timeZone: 'Asia/Dubai' }) : '—';
+    }
+    (groups[key] = groups[key] || []).push(m);
+  }
+  return groups;
 }
 
 function filterMatches(matches) {
@@ -268,22 +322,18 @@ function renderMatchList() {
     return;
   }
 
-  const matches = filterMatches(S.allMatches);
+  const { sort } = getFilters();
+  const matches = sortMatches(filterMatches(S.allMatches), sort);
   if (!matches.length) {
     document.getElementById('match-list').innerHTML = '<div style="padding:20px;color:var(--muted)">Нет матчей</div>';
     return;
   }
 
-  const byDate = {};
-  for (const m of matches) {
-    const dt = parseDate(m.local_date);
-    const key = dt ? dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', timeZone: 'Asia/Dubai' }) : '—';
-    (byDate[key] = byDate[key] || []).push(m);
-  }
-
+  const grouped = groupMatches(matches, sort);
   let html = '';
-  for (const [date, ms] of Object.entries(byDate)) {
-    html += '<div class="group-label">' + esc(date) + ' &nbsp;·&nbsp; Группа ' + esc(ms[0]?.group || '') + '</div>';
+  for (const [label, ms] of Object.entries(grouped)) {
+    const extra = sort === 'time' ? ' &nbsp;·&nbsp; Группа ' + esc(ms[0]?.group || '') : '';
+    html += '<div class="group-label">' + esc(label) + extra + '</div>';
     for (const m of ms) html += matchRow(m);
   }
 

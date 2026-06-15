@@ -3,7 +3,7 @@ import { getAllMatches, getAllTeams } from './sources/worldcup.js'
 import { getLiveMinute, getWCSquad } from './sources/footballdata.js'
 import { getFlagPath } from './flags/converter.js'
 
-const POLL_INTERVAL_MS = 30_000
+const POLL_INTERVAL_MS = 10_000
 const TEAMS_TTL_MS = 60 * 60_000  // teams change rarely — refresh every hour
 
 let teamsRefreshedAt = 0
