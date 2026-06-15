@@ -233,7 +233,7 @@ function getFilters() {
 
 function filterMatches(matches) {
   const { status, group, search } = getFilters();
-  const todayStr = new Date().toDateString();
+  const todayStr = new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Dubai' });
 
   return matches.filter(m => {
     const elapsed = m.time_elapsed || 'notstarted';
@@ -241,7 +241,7 @@ function filterMatches(matches) {
     const isHT = elapsed === 'halftime';
     const isFT = elapsed === 'finished';
     const dt = parseDate(m.local_date);
-    const isToday = dt && dt.toDateString() === todayStr;
+    const isToday = dt && dt.toLocaleDateString('en-US', { timeZone: 'Asia/Dubai' }) === todayStr;
 
     if (status === 'live' && !isLive && !isHT) return false;
     if (status === 'today' && !isToday) return false;
@@ -277,7 +277,7 @@ function renderMatchList() {
   const byDate = {};
   for (const m of matches) {
     const dt = parseDate(m.local_date);
-    const key = dt ? dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' }) : '—';
+    const key = dt ? dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', timeZone: 'Asia/Dubai' }) : '—';
     (byDate[key] = byDate[key] || []).push(m);
   }
 
@@ -293,7 +293,7 @@ function renderMatchList() {
 function matchRow(m) {
   const isActive = S.activeMatchId === m.id;
   const dt = parseDate(m.local_date);
-  const time = dt ? dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '';
+  const time = dt ? dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '';
   const score = (m.finished === 'TRUE' || m.time_elapsed !== 'notstarted')
     ? esc(m.home_score) + ' – ' + esc(m.away_score)
     : '– : –';
@@ -328,7 +328,7 @@ function statusBadge(m) {
   if (e === 'finished') return '<span class="badge badge-ft">FT</span>';
 
   const dt = parseDate(m.local_date);
-  const label = dt ? dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '—';
+  const label = dt ? dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '—';
   return '<span class="badge badge-ns">' + label + '</span>';
 }
 
