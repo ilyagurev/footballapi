@@ -33,11 +33,9 @@ async function refreshTeamsIfStale() {
   const teamsMap = {}
   for (const t of teams) {
     teamsMap[t.id] = t
-    if (t.flag) {
-      getFlagPath(t.id, t.flag).catch(e =>
-        console.warn(`[flags] team ${t.id}: ${e.message}`)
-      )
-    }
+    getFlagPath(t.id, t.fifa_code, t.flag).catch(e =>
+      console.warn(`[flags] team ${t.id} (${t.fifa_code}): ${e.message}`)
+    )
   }
   state.teamsMap = teamsMap
   teamsRefreshedAt = Date.now()
