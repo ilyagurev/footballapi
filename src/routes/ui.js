@@ -551,7 +551,8 @@ function renderHeaderMatch() {
   const el = document.getElementById('hdr-match');
   if (!S || !S.match) { el.innerHTML = ''; return; }
   const m = S.match;
-  const score = esc(String(m.home_score ?? 0)) + ' – ' + esc(String(m.away_score ?? 0));
+  const isNsHdr = (m.time_elapsed || 'notstarted') === 'notstarted';
+  const score = isNsHdr ? '–' : esc(String(m.home_score ?? 0)) + ' – ' + esc(String(m.away_score ?? 0));
   const e = m.time_elapsed || 'notstarted';
   const isLive = e === 'firsthalf' || e === 'secondhalf' || e === 'live' || e === 'halftime';
   const isFT = e === 'finished';

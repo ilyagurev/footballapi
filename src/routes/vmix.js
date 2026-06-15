@@ -3,6 +3,9 @@ import { state } from '../state.js'
 
 const router = Router()
 
+// worldcup26.ir sends score as string "null" for not-started matches
+function safeScore(v) { return (v == null || v === 'null') ? 0 : Number(v) || 0 }
+
 function kickoffDubai(match) {
   const ld = match.local_date
   const off = match.venue_utc_offset
@@ -30,8 +33,8 @@ function kickoffDubai(match) {
 function delayedDynamic() {
   const { match, minute, vmixDelaySec, activeMatchId } = state
   const live = {
-    home_score: match.home_score,
-    away_score: match.away_score,
+    home_score: safeScore(match.home_score),
+    away_score: safeScore(match.away_score),
     minute,
     time_elapsed: match.time_elapsed,
   }
@@ -74,8 +77,8 @@ router.get('/score.json', (req, res) => {
     AwayTeam:    match.away_team_name_en || '',
     HomeCode:    home?.fifa_code || '',
     AwayCode:    away?.fifa_code || '',
-    HomeScore:   String(d.home_score ?? 0),
-    AwayScore:   String(d.away_score ?? 0),
+    HomeScore:   String(safeScore(d.home_score)),
+    AwayScore:   String(safeScore(d.away_score)),
     Group:       match.group || '',
     Minute:      d.minute != null ? String(d.minute) : '',
     Status:       d.time_elapsed || 'notstarted',
