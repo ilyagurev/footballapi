@@ -60,9 +60,11 @@ export function getRole(req) {
   return readToken(parseCookies(req).auth)
 }
 
-export function sessionCookie(role) {
-  // No Secure flag — VPS is served over plain HTTP.
-  return `auth=${makeToken(role)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${MAX_AGE_SEC}`
+export function sessionCookie(role, secure) {
+  // Secure flag when the original request is HTTPS (fifa.qplc.dev via Cloudflare);
+  // omitted for direct http://IP:3050 access so login still works there.
+  const s = secure ? '; Secure' : ''
+  return `auth=${makeToken(role)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${MAX_AGE_SEC}${s}`
 }
 
 export function clearCookie() {

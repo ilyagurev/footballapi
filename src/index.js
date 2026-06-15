@@ -11,6 +11,11 @@ import uiRoutes from './routes/ui.js'
 const app = express()
 const PORT = process.env.PORT || 3050
 
+// Behind Cloudflare (fifa.qplc.dev) — trust X-Forwarded-Proto/Host so
+// req.protocol/req.secure reflect the original HTTPS request, not the
+// internal HTTP hop. Makes flag URLs in score.json use https.
+app.set('trust proxy', true)
+
 app.use(express.json())
 
 // vMix DataSources + flags are PUBLIC — the vMix machine pulls them without auth
@@ -22,7 +27,7 @@ app.post('/api/login', (req, res) => {
   const password = (req.body && req.body.password) || ''
   const role = roleForPassword(password)
   if (!role) return res.status(401).json({ error: 'wrong password' })
-  res.setHeader('Set-Cookie', sessionCookie(role))
+  res.setHeader('Set-Cookie', sessionCookie(role, req.secure))
   console.log('[auth] login as', role)
   res.json({ role })
 })
