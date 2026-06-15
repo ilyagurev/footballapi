@@ -121,6 +121,11 @@ input[type=text] { flex: 1; }
 .ep-copy { font-size: 11px; color: var(--muted); cursor: pointer; flex-shrink: 0; padding: 0 2px; }
 .ep-copy:hover { color: var(--text); }
 .copy-ok { color: var(--green) !important; }
+
+.hdr-match { display: flex; align-items: center; gap: 8px; padding: 4px 12px; background: var(--active-bg); border: 1px solid var(--active-border); border-radius: 8px; font-size: 12px; }
+.hdr-match-score { font-family: var(--mono); font-weight: 700; color: var(--text); }
+.hdr-match-live { color: var(--live); font-weight: 700; font-size: 11px; }
+.hdr-match-ft { color: var(--done); font-size: 11px; }
 </style>
 </head>
 <body>
@@ -128,6 +133,8 @@ input[type=text] { flex: 1; }
   <span class="logo">⚽ vMix Bridge</span>
   <span class="dot" id="dot"></span>
   <span class="hdr-info" id="hdr-info">загрузка...</span>
+  <span class="hdr-space"></span>
+  <div id="hdr-match"></div>
   <span class="hdr-space"></span>
   <span class="hdr-info">опрос каждые 10 сек</span>
 </header>
@@ -197,6 +204,7 @@ async function fetchState() {
 
 function render() {
   renderHeader();
+  renderHeaderMatch();
   renderMatchList();
   renderActiveCard();
   renderLineup();
@@ -204,9 +212,28 @@ function render() {
   populateGroupFilter();
 }
 
+function renderHeaderMatch() {
+  const el = document.getElementById('hdr-match');
+  if (!S || !S.match) { el.innerHTML = ''; return; }
+  const m = S.match;
+  const score = esc(String(m.home_score ?? 0)) + ' – ' + esc(String(m.away_score ?? 0));
+  const e = m.time_elapsed || 'notstarted';
+  const isLive = e === 'firsthalf' || e === 'secondhalf' || e === 'halftime';
+  const isFT = e === 'finished';
+  const min = isLive && S.minute ? S.minute + "'" : null;
+  const statusLabel = min || (e === 'firsthalf' ? '1T' : e === 'secondhalf' ? '2T' : e === 'halftime' ? 'HT' : '');
+  el.innerHTML =
+    '<span style="color:var(--muted)">' + esc(m.home_team_name_en) + '</span>' +
+    '<span class="hdr-match-score">' + score + '</span>' +
+    '<span style="color:var(--muted)">' + esc(m.away_team_name_en) + '</span>' +
+    (isLive && statusLabel ? '<span class="hdr-match-live">' + statusLabel + '</span>' : '') +
+    (isFT ? '<span class="hdr-match-ft">FT</span>' : '');
+}
+
 function renderHeader() {
   const dot = document.getElementById('dot');
   const info = document.getElementById('hdr-info');
+  if (!S) return;
   if (S.lastError) {
     dot.className = 'dot err';
     info.textContent = 'Ошибка: ' + S.lastError;
@@ -216,6 +243,7 @@ function renderHeader() {
     const sec = Math.round((Date.now() - d) / 1000);
     info.textContent = sec < 5 ? 'только что' : sec + ' сек назад';
   }
+  renderHeaderMatch();
 }
 
 function populateGroupFilter() {
@@ -495,6 +523,9 @@ function handleSelect(btn) {
 }
 
 async function selectMatch(id) {
+  const match = S && S.allMatches && S.allMatches.find(function(m) { return m.id === id; });
+  const label = match ? match.home_team_name_en + ' vs ' + match.away_team_name_en : 'этот матч';
+  if (!confirm('Выбрать: ' + label + '?')) return;
   await fetch('/api/select/' + id, { method: 'POST' });
   await fetchState();
 }

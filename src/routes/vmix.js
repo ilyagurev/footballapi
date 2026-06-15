@@ -3,6 +3,27 @@ import { state } from '../state.js'
 
 const router = Router()
 
+function kickoffDubai(match) {
+  const ld = match.local_date
+  const off = match.venue_utc_offset
+  if (!ld) return ''
+  try {
+    const [datePart, hhmm] = ld.split(' ')
+    const [mm, dd, yyyy] = datePart.split('/')
+    let iso
+    if (off == null) {
+      iso = `${yyyy}-${mm}-${dd}T${hhmm}:00Z`
+    } else {
+      const sign = off >= 0 ? '+' : '-'
+      const abs = Math.abs(off)
+      const ohh = String(Math.floor(abs)).padStart(2, '0')
+      const omm = String(Math.round((abs % 1) * 60)).padStart(2, '0')
+      iso = `${yyyy}-${mm}-${dd}T${hhmm}:00${sign}${ohh}:${omm}`
+    }
+    return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })
+  } catch { return '' }
+}
+
 router.get('/score.json', (req, res) => {
   const { match, minute, teamsMap } = state
 
@@ -23,9 +44,10 @@ router.get('/score.json', (req, res) => {
     AwayScore:   String(match.away_score ?? 0),
     Group:       match.group || '',
     Minute:      minute != null ? String(minute) : '',
-    Status:      match.time_elapsed || 'notstarted',
-    HomeFlagUrl: home ? `${base}/flags/${match.home_team_id}.jpg` : '',
-    AwayFlagUrl: away ? `${base}/flags/${match.away_team_id}.jpg` : '',
+    Status:       match.time_elapsed || 'notstarted',
+    KickoffDubai: kickoffDubai(match),
+    HomeFlagUrl:  home ? `${base}/flags/${match.home_team_id}.jpg` : '',
+    AwayFlagUrl:  away ? `${base}/flags/${match.away_team_id}.jpg` : '',
   }])
 })
 
