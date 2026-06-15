@@ -11,7 +11,7 @@ const HTML = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>vMix Bridge</title>
+<title>Artes FIFA</title>
 <style>
 :root {
   --bg: #0d0d0d;
@@ -162,7 +162,7 @@ input[type=text] { flex: 1; }
 <body>
 <div id="auth-overlay">
   <form class="auth-box" onsubmit="return doLogin(event)">
-    <div class="auth-title">⚽ vMix Bridge</div>
+    <div class="auth-title">⚽ Artes FIFA</div>
     <div class="auth-sub">Введите пароль для доступа</div>
     <input type="password" id="auth-pass" placeholder="Пароль" autocomplete="current-password" autofocus>
     <button type="submit">Войти</button>
@@ -170,7 +170,7 @@ input[type=text] { flex: 1; }
   </form>
 </div>
 <header>
-  <span class="logo">⚽ vMix Bridge</span>
+  <span class="logo">⚽ Artes FIFA</span>
   <span class="dot" id="dot"></span>
   <span class="hdr-info" id="hdr-info">загрузка...</span>
   <span class="hdr-space"></span>
