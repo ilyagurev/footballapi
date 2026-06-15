@@ -244,18 +244,18 @@ const STATUS_RANK = { firsthalf: 0, secondhalf: 0, halftime: 0, notstarted: 1, f
 function sortMatches(matches, sort) {
   const copy = [...matches];
   if (sort === 'time') {
-    copy.sort((a, b) => (parseDate(a.local_date) || 0) - (parseDate(b.local_date) || 0));
+    copy.sort((a, b) => (parseDate(a.local_date, a.venue_utc_offset) || 0) - (parseDate(b.local_date, b.venue_utc_offset) || 0));
   } else if (sort === 'group') {
     copy.sort((a, b) => {
       const ga = GROUP_ORDER.indexOf(a.group), gb = GROUP_ORDER.indexOf(b.group);
       return (ga === -1 ? 99 : ga) - (gb === -1 ? 99 : gb) ||
-             (parseDate(a.local_date) || 0) - (parseDate(b.local_date) || 0);
+             (parseDate(a.local_date, a.venue_utc_offset) || 0) - (parseDate(b.local_date, b.venue_utc_offset) || 0);
     });
   } else if (sort === 'status') {
     copy.sort((a, b) => {
       const ra = STATUS_RANK[a.time_elapsed || 'notstarted'] ?? 1;
       const rb = STATUS_RANK[b.time_elapsed || 'notstarted'] ?? 1;
-      return ra - rb || (parseDate(a.local_date) || 0) - (parseDate(b.local_date) || 0);
+      return ra - rb || (parseDate(a.local_date, a.venue_utc_offset) || 0) - (parseDate(b.local_date, b.venue_utc_offset) || 0);
     });
   } else if (sort === 'team') {
     copy.sort((a, b) => (a.home_team_name_en || '').localeCompare(b.home_team_name_en || ''));
@@ -277,7 +277,7 @@ function groupMatches(matches, sort) {
     } else if (sort === 'team') {
       key = (m.home_team_name_en || '—')[0].toUpperCase();
     } else {
-      const dt = parseDate(m.local_date);
+      const dt = parseDate(m.local_date, m.venue_utc_offset);
       key = dt ? dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', timeZone: 'Asia/Dubai' }) : '—';
     }
     (groups[key] = groups[key] || []).push(m);
@@ -294,7 +294,7 @@ function filterMatches(matches) {
     const isLive = elapsed === 'firsthalf' || elapsed === 'secondhalf';
     const isHT = elapsed === 'halftime';
     const isFT = elapsed === 'finished';
-    const dt = parseDate(m.local_date);
+    const dt = parseDate(m.local_date, m.venue_utc_offset);
     const isToday = dt && dt.toLocaleDateString('en-US', { timeZone: 'Asia/Dubai' }) === todayStr;
 
     if (status === 'live' && !isLive && !isHT) return false;
@@ -311,9 +311,26 @@ function filterMatches(matches) {
   });
 }
 
-function parseDate(localDate) {
+// local_date from worldcup26.ir is the venue's LOCAL time (not UTC).
+// utcOffset: -4 Eastern, -5 Central, -7 Western (summer DST, WC period)
+function parseDate(localDate, utcOffset) {
   if (!localDate) return null;
-  return new Date(localDate);
+  try {
+    const m = localDate.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2})$/);
+    if (!m) return new Date(localDate);
+    const [, mm, dd, yyyy, hhmm] = m;
+    if (utcOffset == null) {
+      // fallback: treat as UTC to avoid random browser-local interpretation
+      return new Date(\`\${yyyy}-\${mm}-\${dd}T\${hhmm}:00Z\`);
+    }
+    const sign = utcOffset >= 0 ? '+' : '-';
+    const abs = Math.abs(utcOffset);
+    const ohh = String(Math.floor(abs)).padStart(2, '0');
+    const omm = String(Math.round((abs % 1) * 60)).padStart(2, '0');
+    return new Date(\`\${yyyy}-\${mm}-\${dd}T\${hhmm}:00\${sign}\${ohh}:\${omm}\`);
+  } catch {
+    return null;
+  }
 }
 
 function renderMatchList() {
@@ -342,7 +359,7 @@ function renderMatchList() {
 
 function matchRow(m) {
   const isActive = S.activeMatchId === m.id;
-  const dt = parseDate(m.local_date);
+  const dt = parseDate(m.local_date, m.venue_utc_offset);
   const time = dt ? dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '';
   const score = (m.finished === 'TRUE' || m.time_elapsed !== 'notstarted')
     ? esc(m.home_score) + ' – ' + esc(m.away_score)
@@ -377,7 +394,7 @@ function statusBadge(m) {
   if (e === 'halftime') return '<span class="badge badge-ht">HT</span>';
   if (e === 'finished') return '<span class="badge badge-ft">FT</span>';
 
-  const dt = parseDate(m.local_date);
+  const dt = parseDate(m.local_date, m.venue_utc_offset);
   const label = dt ? dt.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '—';
   return '<span class="badge badge-ns">' + label + '</span>';
 }

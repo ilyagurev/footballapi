@@ -26,3 +26,8 @@ export async function getAllTeams() {
   const data = await get('/get/teams')
   return data.teams || []
 }
+
+export async function getAllStadiums() {
+  const data = await get('/get/stadiums')
+  return data.stadiums || []
+}

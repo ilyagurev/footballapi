@@ -1,5 +1,5 @@
 import { state } from './state.js'
-import { getAllMatches, getAllTeams } from './sources/worldcup.js'
+import { getAllMatches, getAllTeams, getAllStadiums } from './sources/worldcup.js'
 import { getLiveMinute, getWCSquad } from './sources/footballdata.js'
 import { getFlagPath } from './flags/converter.js'
 
@@ -12,6 +12,9 @@ export function startPoller() {
   poll()
   setInterval(poll, POLL_INTERVAL_MS)
 }
+
+// summer UTC offsets: Eastern = -4 (EDT), Central = -5 (CDT), Western = -7 (PDT)
+const REGION_UTC_OFFSET = { Eastern: -4, Central: -5, Western: -7 }
 
 async function poll() {
   try {
@@ -29,7 +32,8 @@ async function poll() {
 async function refreshTeamsIfStale() {
   if (Date.now() - teamsRefreshedAt < TEAMS_TTL_MS) return
 
-  const teams = await getAllTeams()
+  const [teams, stadiums] = await Promise.all([getAllTeams(), getAllStadiums()])
+
   const teamsMap = {}
   for (const t of teams) {
     teamsMap[t.id] = t
@@ -38,8 +42,15 @@ async function refreshTeamsIfStale() {
     )
   }
   state.teamsMap = teamsMap
+
+  const stadiumsMap = {}
+  for (const s of stadiums) {
+    stadiumsMap[s.id] = { ...s, utcOffset: REGION_UTC_OFFSET[s.region] ?? -5 }
+  }
+  state.stadiumsMap = stadiumsMap
+
   teamsRefreshedAt = Date.now()
-  console.log(`[poller] loaded ${teams.length} teams`)
+  console.log(`[poller] loaded ${teams.length} teams, ${stadiums.length} stadiums`)
 }
 
 async function refreshMatches() {
@@ -48,6 +59,7 @@ async function refreshMatches() {
     ...m,
     home_tla: state.teamsMap[m.home_team_id]?.fifa_code,
     away_tla: state.teamsMap[m.away_team_id]?.fifa_code,
+    venue_utc_offset: state.stadiumsMap[m.stadium_id]?.utcOffset ?? null,
   }))
   console.log(`[poller] refreshed ${matches.length} matches`)
 }
