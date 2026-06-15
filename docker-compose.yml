@@ -9,6 +9,7 @@ services:
       - PORT=3050
       - FOOTBALL_DATA_API_KEY=${FOOTBALL_DATA_API_KEY}
       - WC_JWT_TOKEN=${WC_JWT_TOKEN}
+      - AUTH_SECRET=${AUTH_SECRET:-}
       - TZ=Asia/Dubai
     restart: unless-stopped
 

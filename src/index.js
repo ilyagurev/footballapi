@@ -3,6 +3,7 @@ import express from 'express'
 import { ensureCacheDir } from './flags/converter.js'
 import { startPoller, lineupsForMatch } from './poller.js'
 import { state } from './state.js'
+import { roleForPassword, getRole, sessionCookie, clearCookie, requireAuth, requireAdmin } from './auth.js'
 import vmixRoutes from './routes/vmix.js'
 import flagsRoutes from './routes/flags.js'
 import uiRoutes from './routes/ui.js'
@@ -12,10 +13,33 @@ const PORT = process.env.PORT || 3050
 
 app.use(express.json())
 
+// vMix DataSources + flags are PUBLIC — the vMix machine pulls them without auth
 app.use('/vmix', vmixRoutes)
 app.use('/flags', flagsRoutes)
 
-app.post('/api/select/:id', (req, res) => {
+// --- Auth (hardcoded passwords → admin / viewer, 30-day cookie) ---
+app.post('/api/login', (req, res) => {
+  const password = (req.body && req.body.password) || ''
+  const role = roleForPassword(password)
+  if (!role) return res.status(401).json({ error: 'wrong password' })
+  res.setHeader('Set-Cookie', sessionCookie(role))
+  console.log('[auth] login as', role)
+  res.json({ role })
+})
+
+app.post('/api/logout', (_req, res) => {
+  res.setHeader('Set-Cookie', clearCookie())
+  res.json({ ok: true })
+})
+
+app.get('/api/me', (req, res) => {
+  const role = getRole(req)
+  if (!role) return res.status(401).json({ error: 'unauthorized' })
+  res.json({ role })
+})
+
+// Sending a match to vMix requires the admin password
+app.post('/api/select/:id', requireAdmin, (req, res) => {
   const { id } = req.params
   state.activeMatchId = id
   state.lineupsForMatchId = null
@@ -25,7 +49,7 @@ app.post('/api/select/:id', (req, res) => {
 })
 
 // Preview a match WITHOUT sending it to vMix (read-only details + squads)
-app.get('/api/preview/:id', async (req, res) => {
+app.get('/api/preview/:id', requireAuth, async (req, res) => {
   const match = state.allMatches.find(m => m.id === req.params.id)
   if (!match) return res.status(404).json({ error: 'match not found' })
   try {
@@ -36,7 +60,7 @@ app.get('/api/preview/:id', async (req, res) => {
   }
 })
 
-app.get('/api/status', (_req, res) => {
+app.get('/api/status', requireAuth, (_req, res) => {
   res.json({
     activeMatchId: state.activeMatchId,
     match: state.match,

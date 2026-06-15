@@ -39,6 +39,24 @@ header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; bord
 .dot.err { background: var(--live); }
 .hdr-info { font-size: 12px; color: var(--muted); }
 .hdr-space { flex: 1; }
+.logout-btn { font-size: 12px; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg3); color: var(--muted); cursor: pointer; white-space: nowrap; }
+.logout-btn:hover { border-color: var(--live); color: var(--live); }
+.role-tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+.role-tag.admin { background: #0e2a16; color: var(--green); }
+.role-tag.viewer { background: var(--bg3); color: var(--muted); }
+
+#auth-overlay {
+  position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+}
+.auth-box { display: flex; flex-direction: column; gap: 14px; width: 300px; padding: 28px; background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; }
+.auth-title { font-size: 18px; font-weight: 700; text-align: center; }
+.auth-sub { font-size: 13px; color: var(--muted); text-align: center; margin-top: -8px; }
+.auth-box input { background: var(--bg3); border: 1px solid var(--border); color: var(--text); padding: 10px 12px; border-radius: 8px; font-size: 14px; outline: none; }
+.auth-box input:focus { border-color: var(--active-border); }
+.auth-box button { background: var(--active-border); border: none; color: #fff; padding: 10px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.auth-box button:hover { filter: brightness(1.1); }
+.auth-err { font-size: 12px; color: var(--live); text-align: center; min-height: 16px; }
 
 .layout { display: flex; flex: 1; overflow: hidden; }
 
@@ -138,6 +156,15 @@ input[type=text] { flex: 1; }
 </style>
 </head>
 <body>
+<div id="auth-overlay">
+  <form class="auth-box" onsubmit="return doLogin(event)">
+    <div class="auth-title">⚽ vMix Bridge</div>
+    <div class="auth-sub">Введите пароль для доступа</div>
+    <input type="password" id="auth-pass" placeholder="Пароль" autocomplete="current-password" autofocus>
+    <button type="submit">Войти</button>
+    <div class="auth-err" id="auth-err"></div>
+  </form>
+</div>
 <header>
   <span class="logo">⚽ vMix Bridge</span>
   <span class="dot" id="dot"></span>
@@ -146,6 +173,8 @@ input[type=text] { flex: 1; }
   <div id="hdr-match"></div>
   <span class="hdr-space"></span>
   <span class="hdr-info">опрос каждые 10 сек</span>
+  <span class="role-tag" id="role-tag" style="display:none"></span>
+  <button class="logout-btn" id="logout-btn" onclick="logout()" style="display:none">Выход</button>
 </header>
 
 <div class="layout">
@@ -199,6 +228,10 @@ let S = null;
 let lineupTab = 'home';
 let previewId = null;      // match clicked for viewing (client-only, NOT sent to vMix)
 let previewData = null;    // { match, homeLineup, awayLineup } when previewing a non-active match
+let ROLE = null;          // 'admin' | 'viewer' — set after login
+let polling = false;
+
+function canAir() { return ROLE === 'admin'; }
 
 function activeId() { return S && S.activeMatchId; }
 
@@ -230,9 +263,78 @@ function handleRowClick(el) { previewMatch(el.dataset.mid); }
 const POS_ORDER = ['Goalkeeper', 'Defender', 'Midfielder', 'Forward', 'Attacker'];
 const POS_LABEL = { Goalkeeper: 'GK', Defender: 'DEF', Midfielder: 'MID', Forward: 'FWD', Attacker: 'FWD' };
 
+async function init() {
+  try {
+    const res = await fetch('/api/me');
+    if (res.ok) {
+      const d = await res.json();
+      ROLE = d.role;
+      showApp();
+    } else {
+      showAuth();
+    }
+  } catch (e) {
+    showAuth();
+  }
+}
+
+function showAuth() {
+  ROLE = null;
+  document.getElementById('auth-overlay').style.display = 'flex';
+  document.getElementById('logout-btn').style.display = 'none';
+  document.getElementById('role-tag').style.display = 'none';
+  const p = document.getElementById('auth-pass');
+  if (p) { p.value = ''; p.focus(); }
+}
+
+function showApp() {
+  document.getElementById('auth-overlay').style.display = 'none';
+  document.getElementById('logout-btn').style.display = '';
+  const tag = document.getElementById('role-tag');
+  tag.style.display = '';
+  tag.className = 'role-tag ' + (ROLE === 'admin' ? 'admin' : 'viewer');
+  tag.textContent = ROLE === 'admin' ? 'эфир + просмотр' : 'только просмотр';
+  fetchState();
+  if (!polling) {
+    polling = true;
+    setInterval(fetchState, 10_000);
+    setInterval(renderHeader, 5_000);
+  }
+}
+
+async function doLogin(ev) {
+  ev.preventDefault();
+  const pass = document.getElementById('auth-pass').value;
+  const errEl = document.getElementById('auth-err');
+  errEl.textContent = '';
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pass }),
+    });
+    if (res.ok) {
+      const d = await res.json();
+      ROLE = d.role;
+      showApp();
+    } else {
+      errEl.textContent = 'Неверный пароль';
+    }
+  } catch (e) {
+    errEl.textContent = 'Ошибка соединения';
+  }
+  return false;
+}
+
+async function logout() {
+  try { await fetch('/api/logout', { method: 'POST' }); } catch (e) {}
+  location.reload();
+}
+
 async function fetchState() {
   try {
     const res = await fetch('/api/status');
+    if (res.status === 401) { showAuth(); return; }
     S = await res.json();
     render();
   } catch (e) {
@@ -439,6 +541,13 @@ function matchRow(m) {
   const awayFlag = '/flags/' + esc(m.away_team_id) + '.jpg';
   const cls = 'match-row' + (isPreview ? ' is-preview' : '') + (isVmix ? ' is-vmix' : '');
 
+  let airBtn = '';
+  if (isVmix) {
+    airBtn = '<button class="sel-btn vmix" disabled>● эфир</button>';
+  } else if (canAir()) {
+    airBtn = '<button class="sel-btn" data-mid="' + esc(m.id) + '" onclick="event.stopPropagation(); handleSelect(this)">в эфир</button>';
+  }
+
   return \`<div class="\${cls}" data-mid="\${m.id}" onclick="handleRowClick(this)">
     <div class="match-time">\${time}</div>
     <div class="match-teams">
@@ -450,7 +559,7 @@ function matchRow(m) {
     </div>
     <div class="match-score">\${score}</div>
     \${badge}
-    <button class="sel-btn\${isVmix ? ' vmix' : ''}" data-mid="\${m.id}" \${isVmix ? 'disabled' : 'onclick="event.stopPropagation(); handleSelect(this)"'}>\${isVmix ? '● эфир' : 'в эфир'}</button>
+    \${airBtn}
   </div>\`;
 }
 
@@ -498,8 +607,10 @@ function renderActiveCard() {
     banner = '<div class="view-banner on-air"><span>● В ЭФИРЕ (vMix)</span></div>';
   } else {
     titleEl.textContent = 'Просмотр';
-    banner = '<div class="view-banner preview"><span>Просмотр — не в эфире</span>'
-      + '<button class="send-air-btn" data-mid="' + esc(m.id) + '" onclick="handleSelect(this)">▶ В эфир</button></div>';
+    const airBtn = canAir()
+      ? '<button class="send-air-btn" data-mid="' + esc(m.id) + '" onclick="handleSelect(this)">▶ В эфир</button>'
+      : '';
+    banner = '<div class="view-banner preview"><span>Просмотр — не в эфире</span>' + airBtn + '</div>';
   }
 
   el.innerHTML = banner + \`<div class="active-card framed">
@@ -598,9 +709,7 @@ function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-fetchState();
-setInterval(fetchState, 10_000);
-setInterval(renderHeader, 5_000);
+init();
 </script>
 </body>
 </html>`
