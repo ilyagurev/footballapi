@@ -6,7 +6,8 @@ import { state } from './state.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // Persisted on a Docker volume so on-air selection + delay survive restarts
 const DATA_DIR = process.env.DATA_DIR || path.resolve(__dirname, '../data')
-const STATE_FILE = path.join(DATA_DIR, 'active.json')
+const STATE_FILE   = path.join(DATA_DIR, 'active.json')
+const MATCHES_FILE = path.join(DATA_DIR, 'matches.json')
 
 function clampDelay(n) {
   return Math.max(0, Math.min(60, Math.round(n)))
@@ -22,6 +23,27 @@ export async function loadPersisted() {
   } catch {
     return { activeMatchId: null, vmixDelaySec: 0 }  // no file yet / unreadable
   }
+}
+
+// Cache the full match list so a restart doesn't blank the UI while worldcup26.ir is flaky
+export async function persistMatches(matches) {
+  try {
+    await fs.mkdir(DATA_DIR, { recursive: true })
+    await fs.writeFile(MATCHES_FILE, JSON.stringify({ matches, savedAt: new Date().toISOString() }))
+  } catch (err) {
+    console.warn('[persist] matches save failed:', err.message)
+  }
+}
+
+export async function loadPersistedMatches() {
+  try {
+    const data = JSON.parse(await fs.readFile(MATCHES_FILE, 'utf8'))
+    if (Array.isArray(data.matches) && data.matches.length) {
+      console.log(`[persist] restored ${data.matches.length} matches from cache (${data.savedAt})`)
+      return data.matches
+    }
+  } catch {}
+  return null
 }
 
 // Writes the current persistable slice of state to disk (fire-and-forget safe)

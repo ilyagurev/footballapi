@@ -2,6 +2,7 @@ import { state } from './state.js'
 import { getAllMatches, getAllTeams, getAllStadiums } from './sources/worldcup.js'
 import { getLiveMinute, getWCSquad } from './sources/footballdata.js'
 import { getFlagPath } from './flags/converter.js'
+import { persistMatches, loadPersistedMatches } from './persist.js'
 
 const POLL_INTERVAL_MS = 10_000
 const TEAMS_TTL_MS = 60 * 60_000  // teams change rarely — refresh every hour
@@ -11,7 +12,11 @@ let teamsRefreshedAt = 0
 let consecutiveFailures = 0
 let lastMatchCount = -1
 
-export function startPoller() {
+export async function startPoller() {
+  // Seed allMatches from disk cache so the UI is immediately useful
+  // even if worldcup26.ir is flaky at startup
+  const cached = await loadPersistedMatches()
+  if (cached) state.allMatches = cached
   poll()
   setInterval(poll, POLL_INTERVAL_MS)
 }
@@ -95,6 +100,8 @@ async function refreshMatches() {
     console.log(`[poller] matches: ${matches.length}`)
     lastMatchCount = matches.length
   }
+  // Persist so next restart can show matches immediately (worldcup26.ir is flaky)
+  persistMatches(state.allMatches).catch(() => {})
 }
 
 async function pollActiveMatch() {
