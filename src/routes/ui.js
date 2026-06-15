@@ -237,7 +237,7 @@ input[type=text] { flex: 1; }
       </div>
       <div class="lineup-list" id="lineup"></div>
     </div>
-    <div>
+    <div id="endpoints-block">
       <div class="panel-title">DataSource URL для vMix</div>
       <div class="endpoints" id="endpoints"></div>
     </div>
@@ -717,6 +717,11 @@ function renderLineup() {
 }
 
 function renderEndpoints() {
+  // DataSource URLs are only useful for configuring vMix — admin only
+  const block = document.getElementById('endpoints-block');
+  if (block) block.style.display = canAir() ? '' : 'none';
+  if (!canAir()) return;
+
   const host = window.location.origin;
   const eps = [
     { method: 'JSON', path: '/vmix/score.json' },
