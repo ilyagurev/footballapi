@@ -1,6 +1,6 @@
 import { state } from './state.js'
 import { getAllMatches, getAllTeams, getAllStadiums } from './sources/worldcup.js'
-import { getLiveMinute, getWCSquad, getMatchLineup } from './sources/footballdata.js'
+import { getWCSquad, getMatchLineup } from './sources/footballdata.js'
 import { getFdMatches } from './sources/footballdata-matches.js'
 import { getEspnLineup, getEspnMinute } from './sources/espn.js'
 import { getFlagPath } from './flags/converter.js'
@@ -170,12 +170,10 @@ async function pollActiveMatch() {
       state.minute = null
     }
   } else {
-    // worldcup26.ir: fetch live minute from football-data.org as a cross-source lookup
-    const homeTla = match.home_tla
-    const awayTla = match.away_tla
-    if (isLive && homeTla && awayTla) {
-      const minute = await getLiveMinute(homeTla, awayTla)
-      if (minute != null) state.minute = minute
+    // worldcup26.ir: use ESPN for live minute (avoids football-data.org rate limit)
+    if (isLive) {
+      const espnMin = await getEspnMinute(match)
+      if (espnMin != null) state.minute = espnMin
     } else if (!isLive) {
       state.minute = null
     }
