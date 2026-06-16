@@ -202,21 +202,10 @@ function pushScoreSnapshot(match) {
 }
 
 async function loadLineups(match) {
-  // For FD source: try match-specific lineup (starters + bench) first.
-  // This data becomes available ~1h before kickoff when teams submit their sheets.
-  if (state.matchSource === 'football-data') {
-    const data = await getMatchLineup(match.id)
-    if (data && (data.homeStarters.length || data.awayStarters.length)) {
-      state.homeLineup = [...data.homeStarters, ...data.homeBench]
-      state.awayLineup = [...data.awayStarters, ...data.awayBench]
-      lineupHasMatchData = true
-      return
-    }
-  }
-  // Fall back to full squad grouped by position (no starter/bench split)
   const { homeLineup, awayLineup } = await lineupsForMatch(match)
   state.homeLineup = homeLineup
   state.awayLineup = awayLineup
+  lineupHasMatchData = homeLineup.some(p => p.Starter !== undefined)
 }
 
 export async function getOrFetchSquad(tla) {
@@ -226,9 +215,20 @@ export async function getOrFetchSquad(tla) {
   return squad
 }
 
-// Load both squads for any match (used by preview endpoint)
+// Load lineups for any match — used by preview endpoint and active match poller.
+// For FD source: tries match-specific data (starters + bench, available ~1h before KO);
+// falls back to full squad if not yet submitted.
 export async function lineupsForMatch(match) {
-  // home_tla / away_tla are set by both sources
+  if (state.matchSource === 'football-data') {
+    const data = await getMatchLineup(match.id)
+    if (data && (data.homeStarters.length || data.awayStarters.length)) {
+      return {
+        homeLineup: [...data.homeStarters, ...data.homeBench],
+        awayLineup: [...data.awayStarters, ...data.awayBench],
+      }
+    }
+  }
+  // Fall back to full squad grouped by position (no starter/bench split)
   const homeTla = match.home_tla
   const awayTla = match.away_tla
   const [home, away] = await Promise.allSettled([
