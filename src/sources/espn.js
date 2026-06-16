@@ -2,6 +2,9 @@ import { fetchJsonRetry } from '../lib/http.js'
 
 const BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world'
 
+// Cache event IDs so scoreboard doesn't need a find-step on every poll tick
+const eventIdCache = new Map()  // key: "HOME_TLA:AWAY_TLA:DATE" → { eventId, homeFirst }
+
 // ESPN uses slightly different abbreviations for a few nations
 const OUR_TO_ESPN = {
   CUR: 'CUW',  // Curaçao: FD uses CUR, ESPN uses CUW
@@ -62,12 +65,15 @@ async function fetchScoreboard(dateStr) {
 }
 
 // Find ESPN event ID for a match by querying scoreboard on UTC date (and day before).
+// Results are cached by team+date so repeated poll calls don't re-search.
 async function findEspnEvent(match) {
   const date = getQueryDate(match)
   if (!date) return null
 
   const homeTla = toEspnTla(match.home_tla)
   const awayTla = toEspnTla(match.away_tla)
+  const cacheKey = `${homeTla}:${awayTla}:${date}`
+  if (eventIdCache.has(cacheKey)) return eventIdCache.get(cacheKey)
 
   for (const d of [date, prevDay(date)]) {
     const data = await fetchScoreboard(d)
@@ -79,11 +85,40 @@ async function findEspnEvent(match) {
         (home === homeTla && away === awayTla) ||
         (home === awayTla && away === homeTla)
       ) {
-        return { eventId: event.id, homeFirst: home === homeTla }
+        const result = { eventId: event.id, homeFirst: home === homeTla }
+        eventIdCache.set(cacheKey, result)
+        return result
       }
     }
   }
+  eventIdCache.set(cacheKey, null)
   return null
+}
+
+// Fetch live clock for an active match from ESPN scoreboard.
+// Returns actual minute (integer) or null if match not found / not live.
+export async function getEspnMinute(match) {
+  try {
+    const found = await findEspnEvent(match)
+    if (!found) return null
+
+    // Scoreboard for today always returns current state — no date param needed
+    const date = getQueryDate(match)
+    const data = await fetchScoreboard(date)
+    const event = (data.events || []).find(e => e.id === found.eventId)
+    if (!event) return null
+
+    const status = event.competitions?.[0]?.status || {}
+    const typeName = status.type?.name || ''
+    // Only return a minute when the match is actually in progress
+    if (!typeName.includes('IN_PROGRESS') && !typeName.includes('HALF_TIME')) return null
+
+    const clock = status.clock   // seconds elapsed
+    if (clock == null) return null
+    return Math.min(105, Math.max(1, Math.floor(clock / 60)))
+  } catch {
+    return null
+  }
 }
 
 // Fetch starting XI + bench for the given match from ESPN.

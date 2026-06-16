@@ -2,7 +2,7 @@ import { state } from './state.js'
 import { getAllMatches, getAllTeams, getAllStadiums } from './sources/worldcup.js'
 import { getLiveMinute, getWCSquad, getMatchLineup } from './sources/footballdata.js'
 import { getFdMatches } from './sources/footballdata-matches.js'
-import { getEspnLineup } from './sources/espn.js'
+import { getEspnLineup, getEspnMinute } from './sources/espn.js'
 import { getFlagPath } from './flags/converter.js'
 import { persistMatches, loadPersistedMatches } from './persist.js'
 
@@ -156,11 +156,16 @@ async function pollActiveMatch() {
   const isLive = match.time_elapsed === 'firsthalf' || match.time_elapsed === 'secondhalf' || match.time_elapsed === 'live'
 
   if (state.matchSource === 'football-data') {
-    // Minute approximation from utcDate — no extra API call needed
-    if (isLive && match.utcDate) {
-      const elapsed = Math.floor((Date.now() - new Date(match.utcDate).getTime()) / 60_000)
-      const approx = elapsed > 60 ? elapsed - 15 : Math.min(45, elapsed)
-      state.minute = Math.min(105, Math.max(1, approx))
+    if (isLive) {
+      const espnMin = await getEspnMinute(match)
+      if (espnMin != null) {
+        state.minute = espnMin
+      } else if (match.utcDate) {
+        // Fallback: approximate from kickoff time
+        const elapsed = Math.floor((Date.now() - new Date(match.utcDate).getTime()) / 60_000)
+        const approx = elapsed > 60 ? elapsed - 15 : Math.min(45, elapsed)
+        state.minute = Math.min(105, Math.max(1, approx))
+      }
     } else {
       state.minute = null
     }
