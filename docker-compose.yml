@@ -11,6 +11,7 @@ services:
       - FOOTBALL_DATA_API_KEY=${FOOTBALL_DATA_API_KEY}
       - WC_JWT_TOKEN=${WC_JWT_TOKEN}
       - AUTH_SECRET=${AUTH_SECRET:-}
+      - API_FOOTBALL_KEY=${API_FOOTBALL_KEY:-}
       - TZ=Asia/Dubai
     networks:
       - default

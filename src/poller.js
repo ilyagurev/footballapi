@@ -2,6 +2,7 @@ import { state } from './state.js'
 import { getAllMatches, getAllTeams, getAllStadiums } from './sources/worldcup.js'
 import { getLiveMinute, getWCSquad, getMatchLineup } from './sources/footballdata.js'
 import { getFdMatches } from './sources/footballdata-matches.js'
+import { getApiFootballLineup } from './sources/apifootball.js'
 import { getFlagPath } from './flags/converter.js'
 import { persistMatches, loadPersistedMatches } from './persist.js'
 
@@ -202,6 +203,22 @@ function pushScoreSnapshot(match) {
 }
 
 async function loadLineups(match) {
+  // Try api-football.com first (on-air only) — provides real starting XI + bench
+  const apiFootball = await getApiFootballLineup(match)
+  if (apiFootball) {
+    state.homeLineup = [
+      ...apiFootball.homeStarters,
+      ...apiFootball.homeBench,
+    ]
+    state.awayLineup = [
+      ...apiFootball.awayStarters,
+      ...apiFootball.awayBench,
+    ]
+    lineupHasMatchData = true
+    return
+  }
+
+  // Fall back to lineupsForMatch (FD match endpoint / full squad)
   const { homeLineup, awayLineup } = await lineupsForMatch(match)
   state.homeLineup = homeLineup
   state.awayLineup = awayLineup
