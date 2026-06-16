@@ -91,28 +91,38 @@ router.get('/score.json', (req, res) => {
   }])
 })
 
+const POS_SHORT = { Goalkeeper: 'GK', Defender: 'DEF', Midfielder: 'MID', Forward: 'FWD' }
+
+function withLabel(players) {
+  return players.map((p, i) => {
+    const pos = POS_SHORT[p.Position] || (p.Starter === false ? 'SUB' : p.Position || '')
+    const label = pos ? `${pos} · ${p.Name}` : p.Name
+    return { ...p, Label: label }
+  })
+}
+
 router.get('/lineup/home.json', (req, res) => {
-  res.set('Cache-Control', 'no-store').json(state.homeLineup)
+  res.set('Cache-Control', 'no-store').json(withLabel(state.homeLineup))
 })
 
 router.get('/lineup/away.json', (req, res) => {
-  res.set('Cache-Control', 'no-store').json(state.awayLineup)
+  res.set('Cache-Control', 'no-store').json(withLabel(state.awayLineup))
 })
 
 router.get('/lineup/home/starters.json', (req, res) => {
-  res.set('Cache-Control', 'no-store').json(state.homeLineup.filter(p => p.Starter === true))
+  res.set('Cache-Control', 'no-store').json(withLabel(state.homeLineup.filter(p => p.Starter === true)))
 })
 
 router.get('/lineup/home/bench.json', (req, res) => {
-  res.set('Cache-Control', 'no-store').json(state.homeLineup.filter(p => p.Starter !== true))
+  res.set('Cache-Control', 'no-store').json(withLabel(state.homeLineup.filter(p => p.Starter !== true)))
 })
 
 router.get('/lineup/away/starters.json', (req, res) => {
-  res.set('Cache-Control', 'no-store').json(state.awayLineup.filter(p => p.Starter === true))
+  res.set('Cache-Control', 'no-store').json(withLabel(state.awayLineup.filter(p => p.Starter === true)))
 })
 
 router.get('/lineup/away/bench.json', (req, res) => {
-  res.set('Cache-Control', 'no-store').json(state.awayLineup.filter(p => p.Starter !== true))
+  res.set('Cache-Control', 'no-store').json(withLabel(state.awayLineup.filter(p => p.Starter !== true)))
 })
 
 export default router
