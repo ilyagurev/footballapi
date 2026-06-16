@@ -294,6 +294,7 @@ const I18N = {
     just_now: 'just now', sec_ago: 's ago', sec_short: 's', error_prefix: 'Error: ',
     delay: 'Delay', delay_title: 'Broadcast delay for vMix output (0–60s)',
     no_data: 'No data', no_matches: 'No matches', no_lineup: 'No data',
+    starting_xi: 'Starting XI', bench: 'Bench',
     group_word: 'Group', grp_live: '🔴 Live', grp_finished: '✓ Finished', grp_upcoming: '⏳ Upcoming',
     badge_h1: '1H', badge_h2: '2H', air_on: '● on air', air_send: 'Go live',
     panel_match: 'Match', panel_active: 'Active match', panel_preview: 'Preview',
@@ -317,6 +318,7 @@ const I18N = {
     just_now: 'только что', sec_ago: ' сек назад', sec_short: 'с', error_prefix: 'Ошибка: ',
     delay: 'Задержка', delay_title: 'Задержка передачи в vMix (0–60с)',
     no_data: 'Нет данных', no_matches: 'Нет матчей', no_lineup: 'Нет данных',
+    starting_xi: 'Основной состав', bench: 'Запасные',
     group_word: 'Группа', grp_live: '🔴 Live', grp_finished: '✓ Завершённые', grp_upcoming: '⏳ Предстоящие',
     badge_h1: '1Т', badge_h2: '2Т', air_on: '● эфир', air_send: 'В эфир',
     panel_match: 'Матч', panel_active: 'Активный матч', panel_preview: 'Просмотр',
@@ -904,13 +906,33 @@ function renderLineup() {
     return;
   }
 
+  const hasMatchLineup = players.some(function(p) { return p.Starter !== undefined; });
+
+  if (hasMatchLineup) {
+    const starters = players.filter(function(p) { return p.Starter; });
+    const bench    = players.filter(function(p) { return !p.Starter; });
+    let html = '';
+    if (starters.length) {
+      html += '<div class="pos-group lineup-section">' + esc(t('starting_xi')) + '</div>';
+      html += renderByPosition(starters);
+    }
+    if (bench.length) {
+      html += '<div class="pos-group lineup-section" style="margin-top:8px">' + esc(t('bench')) + '</div>';
+      html += renderByPosition(bench);
+    }
+    el.innerHTML = html;
+  } else {
+    el.innerHTML = renderByPosition(players);
+  }
+}
+
+function renderByPosition(players) {
   const groups = {};
   for (const p of players) {
     const pos = p.Position || 'Other';
     (groups[pos] = groups[pos] || []).push(p);
   }
-
-  const order = [...POS_ORDER, ...Object.keys(groups).filter(k => !POS_ORDER.includes(k))];
+  const order = [...POS_ORDER, ...Object.keys(groups).filter(function(k) { return !POS_ORDER.includes(k); })];
   let html = '';
   for (const pos of order) {
     if (!groups[pos]) continue;
@@ -919,7 +941,7 @@ function renderLineup() {
       html += \`<div class="player-row"><span class="player-num">\${esc(p.Number)}</span><span class="player-name">\${esc(p.Name)}</span></div>\`;
     }
   }
-  el.innerHTML = html;
+  return html;
 }
 
 function renderEndpoints() {

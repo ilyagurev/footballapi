@@ -6,6 +6,40 @@ function headers() {
   return { 'X-Auth-Token': process.env.FOOTBALL_DATA_API_KEY || '' }
 }
 
+// Fetch match-specific lineup (starters + bench) from football-data.org.
+// Returns { homeStarters, homeBench, awayStarters, awayBench } or null if not yet available.
+// Team sheets are typically submitted ~1h before kickoff.
+export async function getMatchLineup(matchId) {
+  try {
+    const data = await fetchJsonRetry(`${BASE}/matches/${matchId}`, {
+      headers: headers(),
+      timeoutMs: 10_000,
+      retries: 1,
+      label: 'fd match lineup',
+    })
+    const home = data.homeTeam
+    const away = data.awayTeam
+    if (!home?.lineup?.length && !away?.lineup?.length) return null
+    return {
+      homeStarters: (home?.lineup || []).map(p => toPlayer(p, true)),
+      homeBench:    (home?.bench  || []).map(p => toPlayer(p, false)),
+      awayStarters: (away?.lineup || []).map(p => toPlayer(p, true)),
+      awayBench:    (away?.bench  || []).map(p => toPlayer(p, false)),
+    }
+  } catch {
+    return null
+  }
+}
+
+function toPlayer(p, starter) {
+  return {
+    Name:     p.name || '',
+    Position: normalizePosition(p.position),
+    Number:   String(p.shirtNumber || ''),
+    Starter:  starter,
+  }
+}
+
 export async function getLiveMinute(homeTla, awayTla) {
   try {
     const { matches = [] } = await fetchJsonRetry(`${BASE}/matches?status=IN_PLAY,PAUSED`, {

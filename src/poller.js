@@ -1,6 +1,6 @@
 import { state } from './state.js'
 import { getAllMatches, getAllTeams, getAllStadiums } from './sources/worldcup.js'
-import { getLiveMinute, getWCSquad } from './sources/footballdata.js'
+import { getLiveMinute, getWCSquad, getMatchLineup } from './sources/footballdata.js'
 import { getFdMatches } from './sources/footballdata-matches.js'
 import { getFlagPath } from './flags/converter.js'
 import { persistMatches, loadPersistedMatches } from './persist.js'
@@ -12,6 +12,10 @@ const FAILURE_THRESHOLD = 2       // surface an error only after N consecutive b
 let teamsRefreshedAt = 0
 let consecutiveFailures = 0
 let lastMatchCount = -1
+let lineupRefreshedAt = 0
+let lineupHasMatchData = false   // true when we have starters/bench from match endpoint
+
+const LINEUP_RETRY_MS = 5 * 60_000  // re-check lineup every 5min until match data arrives
 
 export function resetTeamsCache() { teamsRefreshedAt = 0 }
 
@@ -171,9 +175,13 @@ async function pollActiveMatch() {
     }
   }
 
-  if (state.lineupsForMatchId !== state.activeMatchId) {
+  const matchChanged = state.lineupsForMatchId !== state.activeMatchId
+  const staleLineup = !lineupHasMatchData && Date.now() - lineupRefreshedAt > LINEUP_RETRY_MS
+  if (matchChanged || staleLineup) {
+    if (matchChanged) lineupHasMatchData = false
     await loadLineups(match)
     state.lineupsForMatchId = state.activeMatchId
+    lineupRefreshedAt = Date.now()
   }
 
   pushScoreSnapshot(match)
@@ -194,6 +202,18 @@ function pushScoreSnapshot(match) {
 }
 
 async function loadLineups(match) {
+  // For FD source: try match-specific lineup (starters + bench) first.
+  // This data becomes available ~1h before kickoff when teams submit their sheets.
+  if (state.matchSource === 'football-data') {
+    const data = await getMatchLineup(match.id)
+    if (data && (data.homeStarters.length || data.awayStarters.length)) {
+      state.homeLineup = [...data.homeStarters, ...data.homeBench]
+      state.awayLineup = [...data.awayStarters, ...data.awayBench]
+      lineupHasMatchData = true
+      return
+    }
+  }
+  // Fall back to full squad grouped by position (no starter/bench split)
   const { homeLineup, awayLineup } = await lineupsForMatch(match)
   state.homeLineup = homeLineup
   state.awayLineup = awayLineup
