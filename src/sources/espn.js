@@ -1,0 +1,137 @@
+import { fetchJsonRetry } from '../lib/http.js'
+
+const BASE = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world'
+
+// ESPN uses slightly different abbreviations for a few nations
+const OUR_TO_ESPN = {
+  CUR: 'CUW',  // Curaçao: FD uses CUR, ESPN uses CUW
+  URY: 'URU',  // Uruguay: FD uses URY, ESPN uses URU
+}
+
+function toEspnTla(tla) {
+  return OUR_TO_ESPN[tla] || tla
+}
+
+// ESPN position abbreviations → internal label
+const POS = {
+  G: 'Goalkeeper', GK: 'Goalkeeper',
+  CD: 'Defender', 'CD-L': 'Defender', 'CD-R': 'Defender',
+  LB: 'Defender', RB: 'Defender', LWB: 'Defender', RWB: 'Defender', SW: 'Defender',
+  DM: 'Midfielder', CM: 'Midfielder', RM: 'Midfielder', LM: 'Midfielder', AM: 'Midfielder',
+  LW: 'Forward', RW: 'Forward', CF: 'Forward', SS: 'Forward', ST: 'Forward', FW: 'Forward',
+}
+
+function toPlayer(entry, starter) {
+  const a = entry.athlete || {}
+  const posCode = entry.position?.abbreviation || ''
+  return {
+    Name:     a.displayName || a.shortName || '',
+    Number:   String(entry.jersey || ''),
+    Position: POS[posCode] || (starter ? posCode : ''),
+    Starter:  starter,
+  }
+}
+
+// Return the date string (YYYY-MM-DD) to query ESPN with.
+// ESPN uses US Eastern Time (UTC-4 in summer); late UTC-day matches may
+// appear under the previous Eastern calendar date.
+function getQueryDate(match) {
+  const iso = match.utcDate?.slice(0, 10)
+  if (!iso) {
+    // worldcup26.ir source: derive UTC date from local_date + offset
+    if (match.local_date && match.venue_utc_offset != null) {
+      const ms = new Date(match.local_date).getTime() - match.venue_utc_offset * 3_600_000
+      return new Date(ms).toISOString().slice(0, 10)
+    }
+    return null
+  }
+  return iso
+}
+
+function prevDay(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00Z')
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
+async function fetchScoreboard(dateStr) {
+  const yyyymmdd = dateStr.replace(/-/g, '')
+  return fetchJsonRetry(`${BASE}/scoreboard?dates=${yyyymmdd}`, {
+    timeoutMs: 10_000, retries: 1, label: 'espn scoreboard',
+  })
+}
+
+// Find ESPN event ID for a match by querying scoreboard on UTC date (and day before).
+async function findEspnEvent(match) {
+  const date = getQueryDate(match)
+  if (!date) return null
+
+  const homeTla = toEspnTla(match.home_tla)
+  const awayTla = toEspnTla(match.away_tla)
+
+  for (const d of [date, prevDay(date)]) {
+    const data = await fetchScoreboard(d)
+    for (const event of data.events || []) {
+      const comps = event.competitions?.[0]
+      const home = comps?.competitors?.[0]?.team?.abbreviation
+      const away = comps?.competitors?.[1]?.team?.abbreviation
+      if (
+        (home === homeTla && away === awayTla) ||
+        (home === awayTla && away === homeTla)
+      ) {
+        return { eventId: event.id, homeFirst: home === homeTla }
+      }
+    }
+  }
+  return null
+}
+
+// Fetch starting XI + bench for the given match from ESPN.
+// Returns { homeStarters, homeBench, awayStarters, awayBench } or null.
+// No API key required — ESPN public API.
+export async function getEspnLineup(match) {
+  try {
+    const found = await findEspnEvent(match)
+    if (!found) {
+      console.warn('[espn] no event found for', match.home_tla, 'vs', match.away_tla)
+      return null
+    }
+
+    const data = await fetchJsonRetry(`${BASE}/summary?event=${found.eventId}`, {
+      timeoutMs: 12_000, retries: 1, label: 'espn summary',
+    })
+
+    const rosters = data.rosters || []
+    if (rosters.length < 2) return null
+
+    // rosters[0] = home team per ESPN's home/away competitor order
+    const homeRoster = found.homeFirst ? rosters[0] : rosters[1]
+    const awayRoster = found.homeFirst ? rosters[1] : rosters[0]
+
+    const parseRoster = (r) => {
+      const players = r?.roster || []
+      return {
+        starters: players.filter(p => p.starter).map(p => toPlayer(p, true)),
+        bench:    players.filter(p => !p.starter).map(p => toPlayer(p, false)),
+      }
+    }
+
+    const home = parseRoster(homeRoster)
+    const away = parseRoster(awayRoster)
+
+    if (!home.starters.length && !away.starters.length) return null
+
+    console.log(
+      `[espn] lineup: ${home.starters.length}+${home.bench.length} / ${away.starters.length}+${away.bench.length}`
+    )
+    return {
+      homeStarters: home.starters,
+      homeBench:    home.bench,
+      awayStarters: away.starters,
+      awayBench:    away.bench,
+    }
+  } catch (e) {
+    console.warn('[espn] lineup error:', e.message)
+    return null
+  }
+}

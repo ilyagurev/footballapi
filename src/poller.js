@@ -2,7 +2,7 @@ import { state } from './state.js'
 import { getAllMatches, getAllTeams, getAllStadiums } from './sources/worldcup.js'
 import { getLiveMinute, getWCSquad, getMatchLineup } from './sources/footballdata.js'
 import { getFdMatches } from './sources/footballdata-matches.js'
-import { getApiFootballLineup } from './sources/apifootball.js'
+import { getEspnLineup } from './sources/espn.js'
 import { getFlagPath } from './flags/converter.js'
 import { persistMatches, loadPersistedMatches } from './persist.js'
 
@@ -203,17 +203,11 @@ function pushScoreSnapshot(match) {
 }
 
 async function loadLineups(match) {
-  // Try api-football.com first (on-air only) — provides real starting XI + bench
-  const apiFootball = await getApiFootballLineup(match)
-  if (apiFootball) {
-    state.homeLineup = [
-      ...apiFootball.homeStarters,
-      ...apiFootball.homeBench,
-    ]
-    state.awayLineup = [
-      ...apiFootball.awayStarters,
-      ...apiFootball.awayBench,
-    ]
+  // Try ESPN first (on-air only) — free, no key, provides real starting XI + bench
+  const espn = await getEspnLineup(match)
+  if (espn) {
+    state.homeLineup = [...espn.homeStarters, ...espn.homeBench]
+    state.awayLineup = [...espn.awayStarters, ...espn.awayBench]
     lineupHasMatchData = true
     return
   }
