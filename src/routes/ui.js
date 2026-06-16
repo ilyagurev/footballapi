@@ -175,7 +175,9 @@ input[type=text] { flex: 1; }
   background: var(--bg3); border-radius: 8px; border: 1px solid var(--border);
 }
 .ep-method { font-family: var(--mono); font-size: 11px; color: var(--green); font-weight: 700; min-width: 32px; }
-.ep-path { font-family: var(--mono); font-size: 12px; color: var(--muted); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ep-info { flex: 1; min-width: 0; overflow: hidden; }
+.ep-desc { font-size: 12px; color: var(--text); margin-bottom: 2px; }
+.ep-path { font-family: var(--mono); font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ep-copy {
   font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; flex-shrink: 0;
   padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg2);
@@ -304,6 +306,14 @@ const I18N = {
     banner_onair: '● ON AIR (vMix)', banner_preview: 'Preview — not on air',
     copy: 'Copy', copied: '✓ Copied', copy_manual: 'Select manually',
     confirm_air_pre: 'Send to vMix (on air):\\n', confirm_air_post: '?', this_match: 'this match',
+    ep_score: 'Score, teams, flags, minute',
+    ep_home_full: 'Home — full roster',
+    ep_home_start: 'Home — Starting XI',
+    ep_home_bench: 'Home — Bench',
+    ep_away_full: 'Away — full roster',
+    ep_away_start: 'Away — Starting XI',
+    ep_away_bench: 'Away — Bench',
+    ep_flag: 'Team flag by TLA code',
   },
   ru: {
     auth_sub: 'Введите пароль для доступа', auth_pass_ph: 'Пароль', auth_login: 'Войти',
@@ -328,6 +338,14 @@ const I18N = {
     banner_onair: '● В ЭФИРЕ (vMix)', banner_preview: 'Просмотр — не в эфире',
     copy: 'Копировать', copied: '✓ Скопировано', copy_manual: 'Выделите вручную',
     confirm_air_pre: 'Отправить в эфир (vMix):\\n', confirm_air_post: '?', this_match: 'этот матч',
+    ep_score: 'Счёт, команды, флаги, минута',
+    ep_home_full: 'Хозяева — полный состав',
+    ep_home_start: 'Хозяева — Основной состав',
+    ep_home_bench: 'Хозяева — Запасные',
+    ep_away_full: 'Гости — полный состав',
+    ep_away_start: 'Гости — Основной состав',
+    ep_away_bench: 'Гости — Запасные',
+    ep_flag: 'Флаг команды по коду TLA',
   },
 };
 
@@ -952,15 +970,22 @@ function renderEndpoints() {
 
   const host = window.location.origin;
   const eps = [
-    { method: 'JSON', path: '/vmix/score.json' },
-    { method: 'JSON', path: '/vmix/lineup/home.json' },
-    { method: 'JSON', path: '/vmix/lineup/away.json' },
-    { method: 'IMG',  path: '/flags/{teamId}.jpg' },
+    { method: 'JSON', path: '/vmix/score.json',                desc: 'ep_score' },
+    { method: 'JSON', path: '/vmix/lineup/home.json',          desc: 'ep_home_full' },
+    { method: 'JSON', path: '/vmix/lineup/home/starters.json', desc: 'ep_home_start' },
+    { method: 'JSON', path: '/vmix/lineup/home/bench.json',    desc: 'ep_home_bench' },
+    { method: 'JSON', path: '/vmix/lineup/away.json',          desc: 'ep_away_full' },
+    { method: 'JSON', path: '/vmix/lineup/away/starters.json', desc: 'ep_away_start' },
+    { method: 'JSON', path: '/vmix/lineup/away/bench.json',    desc: 'ep_away_bench' },
+    { method: 'IMG',  path: '/flags/{teamId}.jpg',             desc: 'ep_flag' },
   ];
   document.getElementById('endpoints').innerHTML = eps.map(e => \`
     <div class="ep">
       <span class="ep-method">\${e.method}</span>
-      <span class="ep-path">\${esc(host + e.path)}</span>
+      <div class="ep-info">
+        <div class="ep-desc">\${esc(t(e.desc))}</div>
+        <div class="ep-path">\${esc(host + e.path)}</div>
+      </div>
       <button class="ep-copy" data-url="\${esc(host + e.path)}" onclick="copyEp(this)">\${esc(t('copy'))}</button>
     </div>\`).join('');
 }
