@@ -7,6 +7,12 @@ const router = Router()
 function safeScore(v) { return (v == null || v === 'null') ? 0 : Number(v) || 0 }
 
 function kickoffDubai(match) {
+  // football-data.org provides utcDate (already UTC); worldcup26.ir provides local_date + offset
+  if (match.utcDate) {
+    try {
+      return new Date(match.utcDate).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' })
+    } catch { return '' }
+  }
   const ld = match.local_date
   const off = match.venue_utc_offset
   if (!ld) return ''
@@ -27,9 +33,6 @@ function kickoffDubai(match) {
   } catch { return '' }
 }
 
-// Resolve the score/minute/status to emit, applying the broadcast delay.
-// With delay > 0 we return the snapshot as it was `vmixDelaySec` ago, so the
-// vMix titles stay in sync with the delayed broadcast feed.
 function delayedDynamic() {
   const { match, minute, vmixDelaySec, activeMatchId } = state
   const live = {
@@ -44,8 +47,6 @@ function delayedDynamic() {
   const hist = state.scoreHistory.filter(s => s.matchId === activeMatchId)
   if (!hist.length) return live
 
-  // newest snapshot at or before the target time; if none is old enough yet
-  // (history still filling after selecting the match), use the oldest we have
   let snap = null
   for (const s of hist) {
     if (s.t <= target) snap = s
@@ -61,30 +62,32 @@ function delayedDynamic() {
 }
 
 router.get('/score.json', (req, res) => {
-  const { match, teamsMap } = state
+  const { match } = state
 
   if (!match) {
     return res.set('Cache-Control', 'no-store').json([])
   }
 
-  const home = teamsMap[match.home_team_id]
-  const away = teamsMap[match.away_team_id]
   const base = `${req.protocol}://${req.get('host')}`
   const d = delayedDynamic()
 
+  // Flags are cached by TLA (fifa_code) — consistent across both sources
+  const homeTla = match.home_tla || ''
+  const awayTla = match.away_tla || ''
+
   res.set('Cache-Control', 'no-store').json([{
-    HomeTeam:    match.home_team_name_en || '',
-    AwayTeam:    match.away_team_name_en || '',
-    HomeCode:    home?.fifa_code || '',
-    AwayCode:    away?.fifa_code || '',
-    HomeScore:   String(safeScore(d.home_score)),
-    AwayScore:   String(safeScore(d.away_score)),
-    Group:       match.group || '',
-    Minute:      d.minute != null ? String(d.minute) : '',
+    HomeTeam:     match.home_team_name_en || '',
+    AwayTeam:     match.away_team_name_en || '',
+    HomeCode:     homeTla,
+    AwayCode:     awayTla,
+    HomeScore:    String(safeScore(d.home_score)),
+    AwayScore:    String(safeScore(d.away_score)),
+    Group:        match.group || '',
+    Minute:       d.minute != null ? String(d.minute) : '',
     Status:       d.time_elapsed || 'notstarted',
     KickoffDubai: kickoffDubai(match),
-    HomeFlagUrl:  home ? `${base}/flags/${match.home_team_id}.jpg` : '',
-    AwayFlagUrl:  away ? `${base}/flags/${match.away_team_id}.jpg` : '',
+    HomeFlagUrl:  homeTla ? `${base}/flags/${homeTla}.jpg` : '',
+    AwayFlagUrl:  awayTla ? `${base}/flags/${awayTla}.jpg` : '',
   }])
 })
 

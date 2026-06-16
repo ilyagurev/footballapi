@@ -19,27 +19,30 @@ export async function loadPersisted() {
     return {
       activeMatchId: typeof data.activeMatchId === 'string' && data.activeMatchId ? data.activeMatchId : null,
       vmixDelaySec: Number.isFinite(data.vmixDelaySec) ? clampDelay(data.vmixDelaySec) : 0,
+      matchSource: data.matchSource === 'football-data' ? 'football-data' : 'worldcup',
     }
   } catch {
-    return { activeMatchId: null, vmixDelaySec: 0 }  // no file yet / unreadable
+    return { activeMatchId: null, vmixDelaySec: 0, matchSource: 'worldcup' }
   }
 }
 
-// Cache the full match list so a restart doesn't blank the UI while worldcup26.ir is flaky
-export async function persistMatches(matches) {
+// Cache the full match list so a restart doesn't blank the UI while worldcup26.ir is flaky.
+// source tag ensures we don't restore a stale cache when the source changes.
+export async function persistMatches(matches, source) {
   try {
     await fs.mkdir(DATA_DIR, { recursive: true })
-    await fs.writeFile(MATCHES_FILE, JSON.stringify({ matches, savedAt: new Date().toISOString() }))
+    await fs.writeFile(MATCHES_FILE, JSON.stringify({ matches, source, savedAt: new Date().toISOString() }))
   } catch (err) {
     console.warn('[persist] matches save failed:', err.message)
   }
 }
 
-export async function loadPersistedMatches() {
+export async function loadPersistedMatches(source) {
   try {
     const data = JSON.parse(await fs.readFile(MATCHES_FILE, 'utf8'))
+    if (data.source && data.source !== source) return null  // cached from different source
     if (Array.isArray(data.matches) && data.matches.length) {
-      console.log(`[persist] restored ${data.matches.length} matches from cache (${data.savedAt})`)
+      console.log(`[persist] restored ${data.matches.length} matches from ${source} cache (${data.savedAt})`)
       return data.matches
     }
   } catch {}
@@ -53,6 +56,7 @@ export async function persistState() {
     await fs.writeFile(STATE_FILE, JSON.stringify({
       activeMatchId: state.activeMatchId,
       vmixDelaySec: state.vmixDelaySec,
+      matchSource: state.matchSource,
       savedAt: new Date().toISOString(),
     }))
   } catch (err) {

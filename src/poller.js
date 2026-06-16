@@ -1,6 +1,7 @@
 import { state } from './state.js'
 import { getAllMatches, getAllTeams, getAllStadiums } from './sources/worldcup.js'
 import { getLiveMinute, getWCSquad } from './sources/footballdata.js'
+import { getFdMatches } from './sources/footballdata-matches.js'
 import { getFlagPath } from './flags/converter.js'
 import { persistMatches, loadPersistedMatches } from './persist.js'
 
@@ -12,10 +13,12 @@ let teamsRefreshedAt = 0
 let consecutiveFailures = 0
 let lastMatchCount = -1
 
+export function resetTeamsCache() { teamsRefreshedAt = 0 }
+
 export async function startPoller() {
   // Seed allMatches from disk cache so the UI is immediately useful
-  // even if worldcup26.ir is flaky at startup
-  const cached = await loadPersistedMatches()
+  // even if the primary source is flaky at startup
+  const cached = await loadPersistedMatches(state.matchSource)
   if (cached) state.allMatches = cached
   poll()
   setInterval(poll, POLL_INTERVAL_MS)
@@ -25,15 +28,16 @@ export async function startPoller() {
 const REGION_UTC_OFFSET = { Eastern: -4, Central: -5, Western: -7 }
 
 async function poll() {
-  // Each step is isolated so one source failing doesn't wipe the others.
-  // Matches/teams are critical (drive the whole UI); active-match enrichment is not.
   let critical = null
 
-  try {
-    await refreshTeamsIfStale()
-  } catch (err) {
-    critical = err
-    console.warn('[poller] teams/stadiums refresh failed:', err.message)
+  // Team/stadium refresh only needed for worldcup26.ir source
+  if (state.matchSource === 'worldcup') {
+    try {
+      await refreshTeamsIfStale()
+    } catch (err) {
+      critical = err
+      console.warn('[poller] teams/stadiums refresh failed:', err.message)
+    }
   }
 
   let matchesOk = false
@@ -55,7 +59,6 @@ async function poll() {
 
   if (critical) {
     consecutiveFailures++
-    // Debounce: don't flag the UI red on a single transient timeout — only after repeats
     if (consecutiveFailures >= FAILURE_THRESHOLD) state.lastError = critical.message
   } else {
     consecutiveFailures = 0
@@ -71,8 +74,9 @@ async function refreshTeamsIfStale() {
   const teamsMap = {}
   for (const t of teams) {
     teamsMap[t.id] = t
-    getFlagPath(t.id, t.fifa_code, t.flag).catch(e =>
-      console.warn(`[flags] team ${t.id} (${t.fifa_code}): ${e.message}`)
+    // Use TLA (fifa_code) as the flag filename — consistent across both sources
+    getFlagPath(t.fifa_code, t.fifa_code, t.flag).catch(e =>
+      console.warn(`[flags] team ${t.fifa_code}: ${e.message}`)
     )
   }
   state.teamsMap = teamsMap
@@ -88,26 +92,55 @@ async function refreshTeamsIfStale() {
 }
 
 async function refreshMatches() {
+  if (state.matchSource === 'football-data') {
+    await refreshMatchesFd()
+  } else {
+    await refreshMatchesWc()
+  }
+}
+
+async function refreshMatchesWc() {
   const matches = await getAllMatches()
   state.allMatches = matches.map(m => ({
     ...m,
-    home_tla: state.teamsMap[m.home_team_id]?.fifa_code,
-    away_tla: state.teamsMap[m.away_team_id]?.fifa_code,
+    home_tla: state.teamsMap[m.home_team_id]?.fifa_code || '',
+    away_tla: state.teamsMap[m.away_team_id]?.fifa_code || '',
     venue_utc_offset: state.stadiumsMap[m.stadium_id]?.utcOffset ?? null,
   }))
-  // Log only when the count changes — avoids flooding logs every 10s
   if (matches.length !== lastMatchCount) {
-    console.log(`[poller] matches: ${matches.length}`)
+    console.log(`[poller] wc matches: ${matches.length}`)
     lastMatchCount = matches.length
   }
-  // Persist so next restart can show matches immediately (worldcup26.ir is flaky)
-  persistMatches(state.allMatches).catch(() => {})
+  persistMatches(state.allMatches, 'worldcup').catch(() => {})
+}
+
+async function refreshMatchesFd() {
+  const matches = await getFdMatches()
+  state.allMatches = matches
+
+  // Download flags for all teams we haven't cached yet (keyed by TLA)
+  const seen = new Set()
+  for (const m of matches) {
+    for (const tla of [m.home_tla, m.away_tla]) {
+      if (tla && !seen.has(tla)) {
+        seen.add(tla)
+        getFlagPath(tla, tla, null).catch(e =>
+          console.warn(`[flags] ${tla}: ${e.message}`)
+        )
+      }
+    }
+  }
+
+  if (matches.length !== lastMatchCount) {
+    console.log(`[poller] fd matches: ${matches.length}`)
+    lastMatchCount = matches.length
+  }
+  persistMatches(state.allMatches, 'football-data').catch(() => {})
 }
 
 async function pollActiveMatch() {
   if (!state.activeMatchId) return
 
-  // Find match in already-loaded list — no extra API call needed
   const match = state.allMatches.find(m => m.id === state.activeMatchId)
   if (!match) {
     console.warn(`[poller] active match ${state.activeMatchId} not found in list`)
@@ -116,17 +149,26 @@ async function pollActiveMatch() {
   state.match = match
 
   const isLive = match.time_elapsed === 'firsthalf' || match.time_elapsed === 'secondhalf' || match.time_elapsed === 'live'
-  if (isLive) {
-    const homeTla = state.teamsMap[match.home_team_id]?.fifa_code
-    const awayTla = state.teamsMap[match.away_team_id]?.fifa_code
-    if (homeTla && awayTla) {
-      // getLiveMinute already swallows its own errors and returns null —
-      // keep the previous minute on a hiccup rather than blanking it
-      const minute = await getLiveMinute(homeTla, awayTla)
-      if (minute != null) state.minute = minute
+
+  if (state.matchSource === 'football-data') {
+    // Minute approximation from utcDate — no extra API call needed
+    if (isLive && match.utcDate) {
+      const elapsed = Math.floor((Date.now() - new Date(match.utcDate).getTime()) / 60_000)
+      const approx = elapsed > 60 ? elapsed - 15 : Math.min(45, elapsed)
+      state.minute = Math.min(105, Math.max(1, approx))
+    } else {
+      state.minute = null
     }
   } else {
-    state.minute = null
+    // worldcup26.ir: fetch live minute from football-data.org as a cross-source lookup
+    const homeTla = match.home_tla
+    const awayTla = match.away_tla
+    if (isLive && homeTla && awayTla) {
+      const minute = await getLiveMinute(homeTla, awayTla)
+      if (minute != null) state.minute = minute
+    } else if (!isLive) {
+      state.minute = null
+    }
   }
 
   if (state.lineupsForMatchId !== state.activeMatchId) {
@@ -137,8 +179,6 @@ async function pollActiveMatch() {
   pushScoreSnapshot(match)
 }
 
-// Keep a short rolling history of score/minute so the vMix output can be
-// delayed (broadcast sync). Snapshots are tagged with the match id.
 function pushScoreSnapshot(match) {
   const now = Date.now()
   state.scoreHistory.push({
@@ -149,7 +189,6 @@ function pushScoreSnapshot(match) {
     minute: state.minute,
     time_elapsed: match.time_elapsed,
   })
-  // keep a bit more than the max delay (60s) of history
   const cutoff = now - 75_000
   state.scoreHistory = state.scoreHistory.filter(s => s.t >= cutoff)
 }
@@ -167,10 +206,11 @@ export async function getOrFetchSquad(tla) {
   return squad
 }
 
-// Load both squads for any match (used by preview endpoint — does not touch active state)
+// Load both squads for any match (used by preview endpoint)
 export async function lineupsForMatch(match) {
-  const homeTla = state.teamsMap[match.home_team_id]?.fifa_code
-  const awayTla = state.teamsMap[match.away_team_id]?.fifa_code
+  // home_tla / away_tla are set by both sources
+  const homeTla = match.home_tla
+  const awayTla = match.away_tla
   const [home, away] = await Promise.allSettled([
     homeTla ? getOrFetchSquad(homeTla) : Promise.resolve([]),
     awayTla ? getOrFetchSquad(awayTla) : Promise.resolve([]),

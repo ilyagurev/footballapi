@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import { ensureCacheDir } from './flags/converter.js'
-import { startPoller, lineupsForMatch } from './poller.js'
+import { startPoller, lineupsForMatch, resetTeamsCache } from './poller.js'
 import { state } from './state.js'
 import { roleForPassword, getRole, sessionCookie, clearCookie, requireAuth, requireAdmin } from './auth.js'
 import { loadPersisted, persistState } from './persist.js'
@@ -89,9 +89,34 @@ app.get('/api/status', requireAuth, (_req, res) => {
     homeLineup: state.homeLineup,
     awayLineup: state.awayLineup,
     vmixDelaySec: state.vmixDelaySec,
+    matchSource: state.matchSource,
     lastUpdated: state.lastUpdated,
     lastError: state.lastError,
   })
+})
+
+// Switch the active match data source (admin only)
+app.post('/api/source', requireAdmin, (req, res) => {
+  const src = req.body && req.body.source
+  if (src !== 'worldcup' && src !== 'football-data') {
+    return res.status(400).json({ error: 'invalid source' })
+  }
+  state.matchSource = src
+  // Reset all match-related state — IDs differ between sources
+  state.allMatches = []
+  state.match = null
+  state.activeMatchId = null
+  state.minute = null
+  state.scoreHistory = []
+  state.homeLineup = []
+  state.awayLineup = []
+  state.lineupsForMatchId = null
+  state.teamsMap = {}
+  state.stadiumsMap = {}
+  resetTeamsCache()   // force team refresh on next poll
+  persistState()
+  console.log('[api] match source switched to', src)
+  res.json({ ok: true, source: src })
 })
 
 app.use('/', uiRoutes)
@@ -99,7 +124,7 @@ app.use('/', uiRoutes)
 async function main() {
   await ensureCacheDir()
 
-  // Restore on-air match + delay from disk so a restart/redeploy doesn't reset them
+  // Restore on-air match + delay + source from disk so restarts don't reset them
   const restored = await loadPersisted()
   if (restored.activeMatchId) {
     state.activeMatchId = restored.activeMatchId
@@ -107,6 +132,8 @@ async function main() {
   }
   state.vmixDelaySec = restored.vmixDelaySec
   if (restored.vmixDelaySec) console.log('[persist] restored vmix delay', restored.vmixDelaySec, 's')
+  state.matchSource = restored.matchSource
+  if (restored.matchSource !== 'worldcup') console.log('[persist] restored match source', restored.matchSource)
 
   startPoller()
   app.listen(PORT, () => {

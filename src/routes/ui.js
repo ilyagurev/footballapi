@@ -64,6 +64,11 @@ header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; bord
 .lang-switch button.on { background: var(--active-border); color: #fff; }
 .lang-switch button:not(.on):hover { color: var(--text); }
 
+.src-switch { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.src-switch button { font-family: inherit; font-size: 11px; font-weight: 700; padding: 4px 9px; background: var(--bg3); color: var(--muted); border: none; cursor: pointer; }
+.src-switch button.on { background: #0e2a16; color: var(--green); }
+.src-switch button:not(.on):hover { color: var(--text); }
+
 .role-tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
 .role-tag.admin { background: #0e2a16; color: var(--green); }
 .role-tag.viewer { background: var(--bg3); color: var(--muted); }
@@ -216,6 +221,10 @@ input[type=text] { flex: 1; }
     <span class="delay-val" id="delay-val">0s</span>
     <button class="delay-btn" onclick="changeDelay(1)" aria-label="+1">▲</button>
   </span>
+  <span class="src-switch" id="src-switch" style="display:none">
+    <button data-src="worldcup" onclick="setSource('worldcup')">WC26</button>
+    <button data-src="football-data" onclick="setSource('football-data')">FD.org</button>
+  </span>
   <span class="lang-switch">
     <button data-lang="en" onclick="setLang('en')">EN</button>
     <button data-lang="ru" onclick="setLang('ru')">RU</button>
@@ -367,6 +376,7 @@ let ROLE = null;          // 'admin' | 'viewer' — set after login
 let polling = false;
 let delaySec = 0;         // broadcast delay for vMix output (0..60), admin-controlled
 let delayDirtyUntil = 0;  // ignore server delay sync briefly after a local change
+let matchSource = 'worldcup';  // 'worldcup' | 'football-data'
 
 const POLL_MS = 10_000;
 const POLL_CIRC = 2 * Math.PI * 15;  // ring circumference (r=15), matches CSS dasharray
@@ -419,6 +429,32 @@ async function changeDelay(d) {
     if (res.ok) {
       const j = await res.json();
       if (typeof j.seconds === 'number') { delaySec = j.seconds; renderDelay(); }
+    }
+  } catch (e) {}
+}
+
+function renderSource() {
+  const sw = document.getElementById('src-switch');
+  if (!sw) return;
+  sw.style.display = canAir() ? '' : 'none';
+  sw.querySelectorAll('button').forEach(function(b) {
+    b.classList.toggle('on', b.getAttribute('data-src') === matchSource);
+  });
+}
+
+async function setSource(src) {
+  try {
+    const res = await fetch('/api/source', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: src }),
+    });
+    if (res.ok) {
+      matchSource = src;
+      previewId = null;
+      previewData = null;
+      renderSource();
+      await fetchState();
     }
   } catch (e) {}
 }
@@ -529,6 +565,7 @@ async function fetchState() {
     if (res.status === 401) { showAuth(); return; }
     S = await res.json();
     if (typeof S.vmixDelaySec === 'number' && Date.now() >= delayDirtyUntil) delaySec = S.vmixDelaySec;
+    if (S.matchSource) matchSource = S.matchSource;
     render();
     flashPoll();
   } catch (e) {
@@ -544,6 +581,7 @@ function render() {
   renderLineup();
   renderEndpoints();
   renderDelay();
+  renderSource();
   populateGroupFilter();
 }
 
@@ -608,18 +646,18 @@ const STATUS_RANK = { firsthalf: 0, secondhalf: 0, halftime: 0, notstarted: 1, f
 function sortMatches(matches, sort) {
   const copy = [...matches];
   if (sort === 'time') {
-    copy.sort((a, b) => (parseDate(a.local_date, a.venue_utc_offset) || 0) - (parseDate(b.local_date, b.venue_utc_offset) || 0));
+    copy.sort((a, b) => (parseMatchDate(a) || 0) - (parseMatchDate(b) || 0));
   } else if (sort === 'group') {
     copy.sort((a, b) => {
       const ga = GROUP_ORDER.indexOf(a.group), gb = GROUP_ORDER.indexOf(b.group);
       return (ga === -1 ? 99 : ga) - (gb === -1 ? 99 : gb) ||
-             (parseDate(a.local_date, a.venue_utc_offset) || 0) - (parseDate(b.local_date, b.venue_utc_offset) || 0);
+             (parseMatchDate(a) || 0) - (parseMatchDate(b) || 0);
     });
   } else if (sort === 'status') {
     copy.sort((a, b) => {
       const ra = STATUS_RANK[a.time_elapsed || 'notstarted'] ?? 1;
       const rb = STATUS_RANK[b.time_elapsed || 'notstarted'] ?? 1;
-      return ra - rb || (parseDate(a.local_date, a.venue_utc_offset) || 0) - (parseDate(b.local_date, b.venue_utc_offset) || 0);
+      return ra - rb || (parseMatchDate(a) || 0) - (parseMatchDate(b) || 0);
     });
   } else if (sort === 'team') {
     copy.sort((a, b) => (a.home_team_name_en || '').localeCompare(b.home_team_name_en || ''));
@@ -641,7 +679,7 @@ function groupMatches(matches, sort) {
     } else if (sort === 'team') {
       key = (m.home_team_name_en || '—')[0].toUpperCase();
     } else {
-      const dt = parseDate(m.local_date, m.venue_utc_offset);
+      const dt = parseMatchDate(m);
       key = dt ? dt.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long', timeZone: 'Asia/Dubai' }) : '—';
     }
     (groups[key] = groups[key] || []).push(m);
@@ -658,7 +696,7 @@ function filterMatches(matches) {
     const isLive = elapsed === 'firsthalf' || elapsed === 'secondhalf' || elapsed === 'live';
     const isHT = elapsed === 'halftime';
     const isFT = elapsed === 'finished';
-    const dt = parseDate(m.local_date, m.venue_utc_offset);
+    const dt = parseMatchDate(m);
     const isToday = dt && dt.toLocaleDateString('en-US', { timeZone: 'Asia/Dubai' }) === todayStr;
 
     if (status === 'live' && !isLive && !isHT) return false;
@@ -699,6 +737,12 @@ function parseDate(localDate, utcOffset) {
   }
 }
 
+// Resolves kickoff Date from either worldcup26.ir (local_date + offset) or football-data (utcDate)
+function parseMatchDate(m) {
+  if (m.utcDate) return new Date(m.utcDate);
+  return parseDate(m.local_date, m.venue_utc_offset);
+}
+
 function renderMatchList() {
   if (!S?.allMatches?.length) {
     document.getElementById('match-list').innerHTML = '<div style="padding:20px;color:var(--muted)">' + esc(t('no_data')) + '</div>';
@@ -727,14 +771,14 @@ function matchRow(m) {
   const isVmix = S.activeMatchId === m.id;
   const viewedId = previewId || S.activeMatchId;
   const isPreview = viewedId === m.id;
-  const dt = parseDate(m.local_date, m.venue_utc_offset);
+  const dt = parseMatchDate(m);
   const time = dt ? dt.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '';
   const score = (m.finished === 'TRUE' || m.time_elapsed !== 'notstarted')
     ? esc(m.home_score) + ' – ' + esc(m.away_score)
     : '– : –';
   const badge = statusBadge(m);
-  const homeFlag = '/flags/' + esc(m.home_team_id) + '.jpg';
-  const awayFlag = '/flags/' + esc(m.away_team_id) + '.jpg';
+  const homeFlag = '/flags/' + esc(m.home_tla || m.home_team_id) + '.jpg';
+  const awayFlag = '/flags/' + esc(m.away_tla || m.away_team_id) + '.jpg';
   const cls = 'match-row' + (isPreview ? ' is-preview' : '') + (isVmix ? ' is-vmix' : '');
 
   let airBtn = '';
@@ -771,7 +815,7 @@ function statusBadge(m) {
   if (e === 'halftime') return '<span class="badge badge-ht">HT</span>';
   if (e === 'finished') return '<span class="badge badge-ft">FT</span>';
 
-  const dt = parseDate(m.local_date, m.venue_utc_offset);
+  const dt = parseMatchDate(m);
   const label = dt ? dt.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '—';
   return '<span class="badge badge-ns">' + label + '</span>';
 }
@@ -788,8 +832,8 @@ function renderActiveCard() {
     return;
   }
 
-  const homeFlag = '/flags/' + esc(m.home_team_id) + '.jpg';
-  const awayFlag = '/flags/' + esc(m.away_team_id) + '.jpg';
+  const homeFlag = '/flags/' + esc(m.home_tla || m.home_team_id) + '.jpg';
+  const awayFlag = '/flags/' + esc(m.away_tla || m.away_team_id) + '.jpg';
   const te = m.time_elapsed || 'notstarted';
   const minute = (vm.isVmix && S.minute != null) ? S.minute : null;
   const STATUS_LABELS = { firsthalf: t('st_firsthalf'), secondhalf: t('st_secondhalf'), halftime: t('st_halftime'), live: t('st_live'), finished: t('st_finished'), notstarted: t('st_notstarted') };
@@ -798,7 +842,7 @@ function renderActiveCard() {
   const isHT = te === 'halftime';
   const isFT = te === 'finished';
   const isNS = te === 'notstarted';
-  const dt = parseDate(m.local_date, m.venue_utc_offset);
+  const dt = parseMatchDate(m);
   const kickoff = dt ? dt.toLocaleString(dateLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Dubai' }) : '';
 
   let minuteRow = '';
