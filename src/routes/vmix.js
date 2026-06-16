@@ -99,4 +99,20 @@ router.get('/lineup/away.json', (req, res) => {
   res.set('Cache-Control', 'no-store').json(state.awayLineup)
 })
 
+router.get('/lineup/home/starters.json', (req, res) => {
+  res.set('Cache-Control', 'no-store').json(state.homeLineup.filter(p => p.Starter === true))
+})
+
+router.get('/lineup/home/bench.json', (req, res) => {
+  res.set('Cache-Control', 'no-store').json(state.homeLineup.filter(p => p.Starter !== true))
+})
+
+router.get('/lineup/away/starters.json', (req, res) => {
+  res.set('Cache-Control', 'no-store').json(state.awayLineup.filter(p => p.Starter === true))
+})
+
+router.get('/lineup/away/bench.json', (req, res) => {
+  res.set('Cache-Control', 'no-store').json(state.awayLineup.filter(p => p.Starter !== true))
+})
+
 export default router

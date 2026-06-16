@@ -141,7 +141,11 @@ async function main() {
     console.log(`   vMix DataSources:`)
     console.log(`     /vmix/score.json`)
     console.log(`     /vmix/lineup/home.json`)
+    console.log(`     /vmix/lineup/home/starters.json`)
+    console.log(`     /vmix/lineup/home/bench.json`)
     console.log(`     /vmix/lineup/away.json`)
+    console.log(`     /vmix/lineup/away/starters.json`)
+    console.log(`     /vmix/lineup/away/bench.json`)
   })
 }
 
