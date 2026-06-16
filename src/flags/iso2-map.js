@@ -30,4 +30,7 @@ export const FIFA_TO_ISO2 = {
   IRI: 'ir',   // Iran (alternative code)
   RSO: 'za',   // South Africa (alt)
   SAU: 'sa',   // Saudi Arabia (ISO vs FIFA)
+  // football-data.org TLA differences
+  URY: 'uy',   // Uruguay (FD uses URY, FIFA uses URU)
+  CUR: 'cw',   // Curaçao (FD uses CUR, FIFA uses CUW)
 }
