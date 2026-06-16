@@ -39,6 +39,7 @@ function delayedDynamic() {
     home_score: safeScore(match.home_score),
     away_score: safeScore(match.away_score),
     minute,
+    period: state.period,
     time_elapsed: match.time_elapsed,
   }
   if (!vmixDelaySec) return live
@@ -57,6 +58,7 @@ function delayedDynamic() {
     home_score: snap.home_score,
     away_score: snap.away_score,
     minute: snap.minute,
+    period: snap.period,
     time_elapsed: snap.time_elapsed,
   }
 }
@@ -84,6 +86,7 @@ router.get('/score.json', (req, res) => {
     AwayScore:    String(safeScore(d.away_score)),
     Group:        match.group || '',
     Minute:       d.minute != null ? String(d.minute) : '',
+    Period:       d.period != null ? String(d.period) : '',
     Status:       d.time_elapsed || 'notstarted',
     KickoffDubai: kickoffDubai(match),
     HomeFlagUrl:  homeTla ? `${base}/flags/${homeTla}.jpg` : '',

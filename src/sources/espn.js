@@ -95,14 +95,16 @@ async function findEspnEvent(match) {
   return null
 }
 
-// Fetch live clock for an active match from ESPN scoreboard.
-// Returns actual minute (integer) or null if match not found / not live.
+// Fetch live clock + period for an active match from ESPN scoreboard.
+// Returns { minute, period, halftime } or null if match not found / not live.
+//   minute  — football minute (1–105)
+//   period  — 1 (first half) | 2 (second half)
+//   halftime — true when between halves (minute fixed at 45)
 export async function getEspnMinute(match) {
   try {
     const found = await findEspnEvent(match)
     if (!found) return null
 
-    // Scoreboard for today always returns current state — no date param needed
     const date = getQueryDate(match)
     const data = await fetchScoreboard(date)
     const event = (data.events || []).find(e => e.id === found.eventId)
@@ -110,12 +112,20 @@ export async function getEspnMinute(match) {
 
     const status = event.competitions?.[0]?.status || {}
     const typeName = status.type?.name || ''
-    // Only return a minute when the match is actually in progress
-    if (!typeName.includes('IN_PROGRESS') && !typeName.includes('HALF_TIME')) return null
+    const isHalftime = typeName.includes('HALF_TIME')
+    const isInProgress = typeName.includes('IN_PROGRESS')
 
-    const clock = status.clock   // seconds elapsed
+    if (!isInProgress && !isHalftime) return null
+
+    if (isHalftime) {
+      return { minute: 45, period: 1, halftime: true }
+    }
+
+    const clock = status.clock   // total seconds of play elapsed (not real time)
     if (clock == null) return null
-    return Math.min(105, Math.max(1, Math.floor(clock / 60)))
+    const minute = Math.min(105, Math.max(1, Math.floor(clock / 60)))
+    const period = status.period || (minute <= 45 ? 1 : 2)
+    return { minute, period, halftime: false }
   } catch {
     return null
   }

@@ -153,30 +153,29 @@ async function pollActiveMatch() {
   }
   state.match = match
 
-  const isLive = match.time_elapsed === 'firsthalf' || match.time_elapsed === 'secondhalf' || match.time_elapsed === 'live'
+  const isLive = match.time_elapsed === 'firsthalf' || match.time_elapsed === 'secondhalf'
+             || match.time_elapsed === 'live' || match.time_elapsed === 'halftime'
 
-  if (state.matchSource === 'football-data') {
-    if (isLive) {
-      const espnMin = await getEspnMinute(match)
-      if (espnMin != null) {
-        state.minute = espnMin
-      } else if (match.utcDate) {
-        // Fallback: approximate from kickoff time
-        const elapsed = Math.floor((Date.now() - new Date(match.utcDate).getTime()) / 60_000)
-        const approx = elapsed > 60 ? elapsed - 15 : Math.min(45, elapsed)
-        state.minute = Math.min(105, Math.max(1, approx))
+  if (isLive) {
+    const espn = await getEspnMinute(match)
+    if (espn) {
+      state.minute = espn.minute
+      state.period = espn.halftime ? 1 : (espn.period || null)
+      // WC source only returns 'live' for all in-progress states — refine from ESPN period
+      if (state.matchSource === 'worldcup') {
+        if (espn.halftime)       state.match = { ...match, time_elapsed: 'halftime' }
+        else if (espn.period === 1) state.match = { ...match, time_elapsed: 'firsthalf' }
+        else if (espn.period === 2) state.match = { ...match, time_elapsed: 'secondhalf' }
       }
-    } else {
-      state.minute = null
+    } else if (state.matchSource === 'football-data' && match.utcDate) {
+      // ESPN unavailable — approximate from kickoff
+      const elapsed = Math.floor((Date.now() - new Date(match.utcDate).getTime()) / 60_000)
+      const approx = elapsed > 60 ? elapsed - 15 : Math.min(45, elapsed)
+      state.minute = Math.min(105, Math.max(1, approx))
     }
   } else {
-    // worldcup26.ir: use ESPN for live minute (avoids football-data.org rate limit)
-    if (isLive) {
-      const espnMin = await getEspnMinute(match)
-      if (espnMin != null) state.minute = espnMin
-    } else if (!isLive) {
-      state.minute = null
-    }
+    state.minute = null
+    state.period = null
   }
 
   const matchChanged = state.lineupsForMatchId !== state.activeMatchId
@@ -199,6 +198,7 @@ function pushScoreSnapshot(match) {
     home_score: match.home_score,
     away_score: match.away_score,
     minute: state.minute,
+    period: state.period,
     time_elapsed: match.time_elapsed,
   })
   const cutoff = now - 75_000

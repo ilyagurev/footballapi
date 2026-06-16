@@ -2,6 +2,7 @@ export const state = {
   activeMatchId: null,
   match: null,
   minute: null,
+  period: null,   // 1 = first half, 2 = second half (from ESPN)
   allMatches: [],
   teamsMap: {},
   stadiumsMap: {},
