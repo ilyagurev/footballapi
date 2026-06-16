@@ -302,6 +302,7 @@ const I18N = {
     panel_match: 'Match', panel_active: 'Active match', panel_preview: 'Preview',
     card_hint: 'Click a row to preview;<br>the «Go live» button sends it to vMix.',
     st_firsthalf: '1st half', st_secondhalf: '2nd half', st_halftime: 'Half-time',
+    st_extratime: 'Extra time', st_extratime_ht: 'ET break', st_penalties: 'Penalties',
     st_live: 'Live', st_finished: 'Finished', st_notstarted: 'Not started',
     banner_onair: '● ON AIR (vMix)', banner_preview: 'Preview — not on air',
     copy: 'Copy', copied: '✓ Copied', copy_manual: 'Select manually',
@@ -334,6 +335,7 @@ const I18N = {
     panel_match: 'Матч', panel_active: 'Активный матч', panel_preview: 'Просмотр',
     card_hint: 'Кликните строку для просмотра,<br>кнопка «В эфир» отправит матч в vMix.',
     st_firsthalf: '1-й тайм', st_secondhalf: '2-й тайм', st_halftime: 'Перерыв',
+    st_extratime: 'Доп. время', st_extratime_ht: 'Перерыв (ДВ)', st_penalties: 'Пенальти',
     st_live: 'Live', st_finished: 'Завершён', st_notstarted: 'Не начат',
     banner_onair: '● В ЭФИРЕ (vMix)', banner_preview: 'Просмотр — не в эфире',
     copy: 'Копировать', copied: '✓ Скопировано', copy_manual: 'Выделите вручную',
@@ -612,10 +614,13 @@ function renderHeaderMatch() {
   const isNsHdr = (m.time_elapsed || 'notstarted') === 'notstarted';
   const score = isNsHdr ? '–' : esc(String(m.home_score ?? 0)) + ' – ' + esc(String(m.away_score ?? 0));
   const e = m.time_elapsed || 'notstarted';
-  const isLive = e === 'firsthalf' || e === 'secondhalf' || e === 'live' || e === 'halftime';
+  const isLive = e === 'firsthalf' || e === 'secondhalf' || e === 'live'
+             || e === 'halftime' || e === 'extratime' || e === 'extratime_ht' || e === 'penalties';
   const isFT = e === 'finished';
-  const min = isLive && S.minute ? S.minute + "'" : null;
-  const statusLabel = min || (e === 'firsthalf' ? t('badge_h1') : e === 'secondhalf' ? t('badge_h2') : e === 'halftime' ? 'HT' : '');
+  const min = (isLive && e !== 'halftime' && e !== 'extratime_ht') && S.minute ? S.minute + "'" : null;
+  const statusLabel = min
+    || (e === 'firsthalf' ? t('badge_h1') : e === 'secondhalf' ? t('badge_h2')
+    : e === 'halftime' ? 'HT' : e === 'extratime' ? 'ET' : e === 'extratime_ht' ? 'ET' : e === 'penalties' ? 'PEN' : '');
   el.innerHTML =
     '<span style="color:var(--muted)">' + esc(m.home_team_name_en) + '</span>' +
     '<span class="hdr-match-score">' + score + '</span>' +
@@ -661,7 +666,7 @@ function getFilters() {
 }
 
 const GROUP_ORDER = ['A','B','C','D','E','F','G','H','I','J','K','L','R32','R16','QF','SF','3RD','FINAL'];
-const STATUS_RANK = { firsthalf: 0, secondhalf: 0, halftime: 0, notstarted: 1, finished: 2 };
+const STATUS_RANK = { firsthalf: 0, secondhalf: 0, halftime: 0, extratime: 0, extratime_ht: 0, penalties: 0, notstarted: 1, finished: 2 };
 
 function sortMatches(matches, sort) {
   const copy = [...matches];
@@ -693,7 +698,7 @@ function groupMatches(matches, sort) {
       key = t('group_word') + ' ' + (m.group || '—');
     } else if (sort === 'status') {
       const e = m.time_elapsed || 'notstarted';
-      key = (e === 'firsthalf' || e === 'secondhalf' || e === 'live' || e === 'halftime') ? t('grp_live')
+      key = (e === 'firsthalf' || e === 'secondhalf' || e === 'live' || e === 'halftime' || e === 'extratime' || e === 'extratime_ht' || e === 'penalties') ? t('grp_live')
           : e === 'finished' ? t('grp_finished')
           : t('grp_upcoming');
     } else if (sort === 'team') {
@@ -713,8 +718,9 @@ function filterMatches(matches) {
 
   return matches.filter(m => {
     const elapsed = m.time_elapsed || 'notstarted';
-    const isLive = elapsed === 'firsthalf' || elapsed === 'secondhalf' || elapsed === 'live';
-    const isHT = elapsed === 'halftime';
+    const isLive = elapsed === 'firsthalf' || elapsed === 'secondhalf' || elapsed === 'live'
+               || elapsed === 'extratime' || elapsed === 'penalties';
+    const isHT = elapsed === 'halftime' || elapsed === 'extratime_ht';
     const isFT = elapsed === 'finished';
     const dt = parseMatchDate(m);
     const isToday = dt && dt.toLocaleDateString('en-US', { timeZone: 'Asia/Dubai' }) === todayStr;
@@ -832,7 +838,12 @@ function statusBadge(m) {
     const lbl = min || (e === 'firsthalf' ? t('badge_h1') : e === 'secondhalf' ? t('badge_h2') : 'LIVE');
     return '<span class="badge badge-live">' + lbl + '</span>';
   }
+  if (e === 'extratime' || e === 'penalties') {
+    const lbl = (e === 'penalties' ? 'PEN' : (min || 'ET'));
+    return '<span class="badge badge-live">' + lbl + '</span>';
+  }
   if (e === 'halftime') return '<span class="badge badge-ht">HT</span>';
+  if (e === 'extratime_ht') return '<span class="badge badge-ht">ET</span>';
   if (e === 'finished') return '<span class="badge badge-ft">FT</span>';
 
   const dt = parseMatchDate(m);
@@ -856,10 +867,15 @@ function renderActiveCard() {
   const awayFlag = '/flags/' + esc(m.away_tla || m.away_team_id) + '.jpg';
   const te = m.time_elapsed || 'notstarted';
   const minute = (vm.isVmix && S.minute != null) ? S.minute : null;
-  const STATUS_LABELS = { firsthalf: t('st_firsthalf'), secondhalf: t('st_secondhalf'), halftime: t('st_halftime'), live: t('st_live'), finished: t('st_finished'), notstarted: t('st_notstarted') };
+  const STATUS_LABELS = {
+    firsthalf: t('st_firsthalf'), secondhalf: t('st_secondhalf'), halftime: t('st_halftime'),
+    extratime: t('st_extratime'), extratime_ht: t('st_extratime_ht'), penalties: t('st_penalties'),
+    live: t('st_live'), finished: t('st_finished'), notstarted: t('st_notstarted'),
+  };
   const statusLabel = STATUS_LABELS[te] || te;
-  const isActiveLive = te === 'firsthalf' || te === 'secondhalf' || te === 'live';
-  const isHT = te === 'halftime';
+  const isActiveLive = te === 'firsthalf' || te === 'secondhalf' || te === 'live'
+                    || te === 'extratime' || te === 'penalties';
+  const isHT = te === 'halftime' || te === 'extratime_ht';
   const isFT = te === 'finished';
   const isNS = te === 'notstarted';
   const dt = parseMatchDate(m);

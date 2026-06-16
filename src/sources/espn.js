@@ -117,14 +117,16 @@ export async function getEspnMinute(match) {
 
     if (!isInProgress && !isHalftime) return null
 
+    const period = status.period || 1
+    const clock  = status.clock ?? 0   // total seconds of play elapsed
+
     if (isHalftime) {
-      return { minute: 45, period: 1, halftime: true }
+      // clock holds minutes played so far — end of 1H ≈ 2700s, end of ET-1H ≈ 6300s
+      const minute = Math.max(1, Math.floor(clock / 60))
+      return { minute, period, halftime: true }
     }
 
-    const clock = status.clock   // total seconds of play elapsed (not real time)
-    if (clock == null) return null
-    const minute = Math.min(105, Math.max(1, Math.floor(clock / 60)))
-    const period = status.period || (minute <= 45 ? 1 : 2)
+    const minute = Math.min(120, Math.max(1, Math.floor(clock / 60)))
     return { minute, period, halftime: false }
   } catch {
     return null

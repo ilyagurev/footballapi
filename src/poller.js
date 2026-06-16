@@ -163,9 +163,13 @@ async function pollActiveMatch() {
       state.period = espn.halftime ? 1 : (espn.period || null)
       // WC source only returns 'live' for all in-progress states — refine from ESPN period
       if (state.matchSource === 'worldcup') {
-        if (espn.halftime)       state.match = { ...match, time_elapsed: 'halftime' }
-        else if (espn.period === 1) state.match = { ...match, time_elapsed: 'firsthalf' }
-        else if (espn.period === 2) state.match = { ...match, time_elapsed: 'secondhalf' }
+        let te
+        if (espn.halftime)        te = espn.period >= 3 ? 'extratime_ht' : 'halftime'
+        else if (espn.period === 1) te = 'firsthalf'
+        else if (espn.period === 2) te = 'secondhalf'
+        else if (espn.period === 3 || espn.period === 4) te = 'extratime'
+        else if (espn.period === 5) te = 'penalties'
+        if (te) state.match = { ...match, time_elapsed: te }
       }
     } else if (state.matchSource === 'football-data' && match.utcDate) {
       // ESPN unavailable — approximate from kickoff
